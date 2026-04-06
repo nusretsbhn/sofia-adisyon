@@ -6,3 +6,7 @@ pos-app/release/
 *.db-journal
 .env
 .DS_Store
+
+# npm pack / geçici arşivler
+app-builder-bin-*.tgz
+*.tgz
