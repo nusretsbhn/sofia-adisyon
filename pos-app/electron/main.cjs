@@ -140,6 +140,9 @@ async function startBundledBackend() {
     TEMP: tmpDir,
     CACHE_DIR: prismaCacheRoot,
     ...syncSettings,
+    // migrate deploy sırasında Prisma HTTPS (checkpoint / güncelleme kontrolü) — bazı ağlarda ECONNRESET
+    CHECKPOINT_DISABLE: "1",
+    PRISMA_HIDE_UPDATE_MESSAGE: "1",
   };
 
   const prismaSchema = path.join(backendRoot, "prisma", "schema.prisma");
