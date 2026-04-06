@@ -1,5 +1,7 @@
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  // CI (Linux/Docker) üzerinden Windows .exe paketlerken Prisma engine’in win hedefi de üretilsin
+  binaryTargets = ["native", "windows"]
 }
 
 datasource db {

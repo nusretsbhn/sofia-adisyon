@@ -1,3 +1,7 @@
+# Windows installer: GitHub’ın Windows runner’ında app-builder.exe sık ENOENT/Defender ile kırılıyor.
+# electron-userland resmi Wine imajında derleme — Windows ikilisi Wine altında, app-builder.exe gerekmez.
+# https://www.electron.build/multi-platform-build
+
 name: Build Windows POS installer
 
 on:
@@ -5,93 +9,38 @@ on:
 
 jobs:
   windows-installer:
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
     timeout-minutes: 60
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
-      # app-builder.exe sık sık Defender tarafından yanlış pozitif / karantina ile silinir → verify geçer, spawn ENOENT.
-      - name: Exclude workspace from Microsoft Defender (real-time scan)
-        shell: pwsh
-        run: |
-          $ws = $env:GITHUB_WORKSPACE
-          if ([string]::IsNullOrWhiteSpace($ws)) { $ws = (Get-Location).Path }
-          Write-Host "Defender exclusion path: $ws"
-          try {
-            Add-MpPreference -ExclusionPath $ws -ErrorAction Stop
-            Write-Host "Defender exclusion added."
-          } catch {
-            Write-Warning "Add-MpPreference failed (may need admin): $($_.Exception.Message)"
-          }
-
-      - name: Enable long paths (Windows)
-        shell: pwsh
-        run: git config --global core.longpaths true
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-          cache: npm
-
-      - name: Versions
-        run: node -v && npm -v
-
-      - name: Install root dependencies
-        run: npm install --legacy-peer-deps --no-audit --no-fund
-
-      - name: Bundle backend for Electron (pos-app)
-        run: npm run bundle-backend --workspace pos-app
-
-      - name: Build POS frontend (Vite)
-        run: npm run build --workspace pos-app
-
-      - name: Electron Builder (Windows NSIS)
-        shell: pwsh
+      - name: Build NSIS on Linux (Docker Wine)
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
-          CI: "false"
         run: |
-          $ErrorActionPreference = "Stop"
-          $rootAb = Join-Path (Get-Location) "node_modules\app-builder-bin"
-          $exe = Join-Path $rootAb "win\x64\app-builder.exe"
+          set -euo pipefail
+          docker run --rm \
+            -e CSC_IDENTITY_AUTO_DISCOVERY \
+            -v "$GITHUB_WORKSPACE:/project" \
+            -w /project \
+            electronuserland/builder:20-wine-mono \
+            /bin/bash -lc "set -euo pipefail
+              node -v && npm -v
+              npm install --legacy-peer-deps --no-audit --no-fund
+              npm run bundle-backend --workspace pos-app
+              npm run build --workspace pos-app
+              npx electron-builder --projectDir pos-app --win"
 
-          if (-not (Test-Path $exe)) {
-            Write-Host "Reinstalling app-builder-bin (missing win exe)..."
-            npm install app-builder-bin@5.0.0-alpha.10 --no-save --foreground-scripts
-          }
-          if (-not (Test-Path $exe)) {
-            throw "app-builder.exe still missing: $exe"
-          }
-
-          $len = (Get-Item $exe).Length
-          Write-Host "app-builder.exe size: $len bytes"
-          if ($len -lt 1MB) { throw "app-builder.exe looks truncated (< 1MB)" }
-
-          # Aynı shell'de gerçekten çalıştığını doğrula (Defender karantina / bozuk dosya)
-          & $exe --version
-          if ($LASTEXITCODE -ne 0) { throw "app-builder --version failed, exit $LASTEXITCODE" }
-
-          $full = (Get-Item $exe).FullName
-          $env:CUSTOM_APP_BUILDER_PATH = $full
-          Write-Host "CUSTOM_APP_BUILDER_PATH=$full"
-
-          # npx yerine doğrudan CLI — ekstra node süreci / env karmaşası azalır
-          node "$PWD\node_modules\electron-builder\cli.js" --projectDir pos-app
+      - name: Fix workspace permissions (Docker root files)
+        if: always()
+        run: sudo chown -R "$(id -u):$(id -g)" "$GITHUB_WORKSPACE" || true
 
       - name: List release output (debug)
         if: always()
-        shell: pwsh
         run: |
-          if (Test-Path "pos-app/release") {
-            Get-ChildItem -Recurse "pos-app/release" | Select-Object FullName, Length
-          } else {
-            Write-Host "pos-app/release yok."
-          }
+          if [ -d pos-app/release ]; then find pos-app/release -type f -printf '%s %p\n' | head -40; else echo 'pos-app/release yok'; fi
 
       - name: Upload release folder
         if: success()
