@@ -22,7 +22,7 @@ fs.cpSync(path.join(backendSrc, "prisma"), path.join(outDir, "prisma"), { recurs
 fs.copyFileSync(path.join(backendSrc, "package.json"), path.join(outDir, "package.json"));
 
 console.log("bundled-backend: npm install --omit=dev …");
-execSync("npm install --omit=dev", { cwd: outDir, stdio: "inherit" });
+execSync("npm install --omit=dev --legacy-peer-deps", { cwd: outDir, stdio: "inherit" });
 console.log("bundled-backend: prisma generate …");
 execSync("npx prisma generate", { cwd: outDir, stdio: "inherit" });
 console.log("bundled-backend hazır:", outDir);

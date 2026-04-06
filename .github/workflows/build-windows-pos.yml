@@ -23,16 +23,24 @@ jobs:
         with:
           node-version: "20"
           cache: npm
-          cache-dependency-path: package-lock.json
 
-      - name: Install dependencies
+      - name: Versions
+        run: node -v && npm -v
+
+      - name: Install root dependencies
         run: npm install --legacy-peer-deps --no-audit --no-fund
 
-      - name: Build POS installer (NSIS)
+      - name: Bundle backend for Electron (pos-app)
+        run: npm run bundle-backend --workspace pos-app
+
+      - name: Build POS frontend (Vite)
+        run: npm run build --workspace pos-app
+
+      - name: Electron Builder (Windows NSIS)
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
-          CI: false
-        run: npm run build:pos-installer
+          CI: "false"
+        run: npm exec --workspace pos-app -- electron-builder
 
       - name: List release output (debug)
         if: always()
@@ -41,7 +49,7 @@ jobs:
           if (Test-Path "pos-app/release") {
             Get-ChildItem -Recurse "pos-app/release" | Select-Object FullName, Length
           } else {
-            Write-Host "pos-app/release yok — build adımı başarısız olmuş olabilir."
+            Write-Host "pos-app/release yok."
           }
 
       - name: Upload release folder
