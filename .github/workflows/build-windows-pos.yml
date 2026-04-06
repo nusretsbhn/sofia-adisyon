@@ -36,11 +36,25 @@ jobs:
       - name: Build POS frontend (Vite)
         run: npm run build --workspace pos-app
 
+      # app-builder-bin bazen workspace kurulumunda win/x64/app-builder.exe oluşturmuyor; script'leri zorla çalıştır
+      - name: Ensure app-builder-bin (Windows exe)
+        shell: pwsh
+        run: |
+          npm install app-builder-bin@5.0.0-alpha.10 --no-save --foreground-scripts
+          $exe = "node_modules/app-builder-bin/win/x64/app-builder.exe"
+          if (-not (Test-Path $exe)) {
+            Write-Host "app-builder.exe yok, klasör:"
+            Get-ChildItem -Recurse node_modules/app-builder-bin -ErrorAction SilentlyContinue | Select-Object -First 40 FullName
+            throw "app-builder.exe bulunamadi: $exe"
+          }
+          Write-Host "OK: $exe"
+
       - name: Electron Builder (Windows NSIS)
+        working-directory: pos-app
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
           CI: "false"
-        run: npm exec --workspace pos-app -- electron-builder
+        run: npx electron-builder
 
       - name: List release output (debug)
         if: always()
