@@ -6,27 +6,46 @@ on:
 jobs:
   windows-installer:
     runs-on: windows-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Enable long paths (Windows)
+        shell: pwsh
+        run: git config --global core.longpaths true
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "18"
+          node-version: "20"
           cache: npm
+          cache-dependency-path: package-lock.json
 
       - name: Install dependencies
-        run: npm install --legacy-peer-deps
+        run: npm install --legacy-peer-deps --no-audit --no-fund
 
       - name: Build POS installer (NSIS)
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
+          CI: false
         run: npm run build:pos-installer
 
+      - name: List release output (debug)
+        if: always()
+        shell: pwsh
+        run: |
+          if (Test-Path "pos-app/release") {
+            Get-ChildItem -Recurse "pos-app/release" | Select-Object FullName, Length
+          } else {
+            Write-Host "pos-app/release yok — build adımı başarısız olmuş olabilir."
+          }
+
       - name: Upload release folder
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: turadisyon-pos-windows-release
