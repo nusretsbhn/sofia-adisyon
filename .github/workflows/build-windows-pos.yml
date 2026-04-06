@@ -31,6 +31,7 @@ jobs:
               npm install --legacy-peer-deps --no-audit --no-fund
               npm run bundle-backend --workspace pos-app
               npm run build --workspace pos-app
+              test -x node_modules/app-builder-bin/linux/x64/app-builder || { echo 'app-builder (linux) eksik'; ls -la node_modules/app-builder-bin/linux/x64/ 2>/dev/null || ls -la node_modules/app-builder-bin/; exit 1; }
               npx electron-builder --projectDir pos-app --win"
 
       - name: Fix workspace permissions (Docker root files)

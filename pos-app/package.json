@@ -33,6 +33,7 @@
   "build": {
     "appId": "com.turadisyon.pos",
     "productName": "TurAdisyon POS",
+    "npmRebuild": false,
     "files": [
       "dist/**/*",
       "electron/**/*",
