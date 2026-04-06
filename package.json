@@ -1,0 +1,17 @@
+{
+  "name": "turadisyon",
+  "private": true,
+  "scripts": {
+    "backend": "npm run dev --workspace backend",
+    "pos": "npm run dev --workspace pos-app",
+    "admin": "npm run dev --workspace admin-panel",
+    "db:migrate": "npm run db:migrate --workspace backend",
+    "db:studio": "npm run db:studio --workspace backend",
+    "build:pos-installer": "npm run dist --workspace pos-app"
+  },
+  "workspaces": [
+    "backend",
+    "pos-app",
+    "admin-panel"
+  ]
+}

@@ -1,0 +1,196 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// SQLite: enum yerine string (ADMIN | PERSONEL | KASIYER | GARSON, vb.)
+
+model Kullanici {
+  id                Int       @id @default(autoincrement())
+  ad                String
+  soyad             String
+  kullanici_adi     String    @unique
+  sifre_hash        String
+  pin_hash          String?
+  rol               String    @default("GARSON")
+  aktif             Boolean   @default(true)
+  olusturma_tarihi  DateTime  @default(now())
+
+  olusturdugu_adisyonlar Adisyon[]       @relation("AdisyonOlusturan")
+  ekledigi_kalemler      AdisyonKalem[]
+  odemeler               Odeme[]
+  cari_hareketler        CariHareket[]
+  envanter_girisler      EnvanterGiris[]
+}
+
+model Kategori {
+  id     Int     @id @default(autoincrement())
+  ad     String
+  renk   String?
+  ikon   String?
+  sira   Int     @default(0)
+  aktif  Boolean @default(true)
+
+  urunler Urun[]
+}
+
+model Urun {
+  id               Int      @id @default(autoincrement())
+  kategori_id      Int
+  ad               String
+  fiyat            Int
+  barkod           String?
+  tur              String   @default("URUN") // URUN | HAMMADDE
+  stok_takibi      Boolean  @default(false)
+  // Stok takibi açık ürünlerde miktarın birimi (örn. adet, cl)
+  stok_birim       String   @default("adet")
+  aciklama         String?
+  min_stok         Int      @default(0)
+  aktif            Boolean  @default(true)
+  olusturma_tarihi DateTime @default(now())
+
+  kategori        Kategori         @relation(fields: [kategori_id], references: [id])
+  receteler       Recete[]
+  adisyon_kalemleri AdisyonKalem[]
+  envanter_giris  EnvanterGiris[]
+  envanter_cikis  EnvanterCikis[]
+}
+
+model Recete {
+  id           Int         @id @default(autoincrement())
+  urun_id      Int
+  hammadde_ad  String
+  miktar       Float
+  birim        String
+
+  urun Urun @relation(fields: [urun_id], references: [id], onDelete: Cascade)
+
+  @@index([urun_id])
+}
+
+model Adisyon {
+  id                     Int             @id @default(autoincrement())
+  numara                 String
+  masa_no                Int             @default(0)
+  musteri_adi            String          @default("")
+  acilis_tarihi          DateTime        @default(now())
+  kapanma_tarihi         DateTime?
+  durum                  String          @default("ACIK")
+  odeme_turu             String?
+  toplam_tutar           Int             @default(0)
+  indirim_tutari         Int             @default(0)
+  notlar                 String?
+  olusturan_kullanici_id Int
+
+  olusturan Kullanici      @relation("AdisyonOlusturan", fields: [olusturan_kullanici_id], references: [id])
+  kalemler  AdisyonKalem[]
+  odemeler  Odeme[]
+  cari_hareketler CariHareket[]
+
+  @@index([durum])
+  @@index([acilis_tarihi])
+}
+
+model AdisyonKalem {
+  id                  Int      @id @default(autoincrement())
+  adisyon_id          Int
+  urun_id             Int
+  urun_adi            String
+  birim_fiyat         Int
+  adet                Int
+  toplam_fiyat        Int
+  ikram               Boolean  @default(false)
+  iade                Boolean  @default(false)
+  ikram_neden         String?
+  fiyat_degistirildi  Boolean  @default(false)
+  orijinal_fiyat      Int?
+  ekleme_tarihi       DateTime @default(now())
+  ekleyen_kullanici_id Int
+
+  adisyon    Adisyon    @relation(fields: [adisyon_id], references: [id], onDelete: Cascade)
+  urun       Urun       @relation(fields: [urun_id], references: [id])
+  ekleyen    Kullanici  @relation(fields: [ekleyen_kullanici_id], references: [id])
+  envanter_cikislari EnvanterCikis[]
+
+  @@index([adisyon_id])
+}
+
+model Odeme {
+  id            Int       @id @default(autoincrement())
+  adisyon_id    Int
+  tutar         Int
+  odeme_turu    String
+  tarih         DateTime  @default(now())
+  kullanici_id  Int
+
+  adisyon   Adisyon   @relation(fields: [adisyon_id], references: [id], onDelete: Cascade)
+  kullanici Kullanici @relation(fields: [kullanici_id], references: [id])
+
+  @@index([adisyon_id])
+}
+
+model Cari {
+  id               Int      @id @default(autoincrement())
+  ad               String
+  telefon          String?
+  email            String?
+  notlar           String?
+  toplam_borc      Int      @default(0)
+  olusturma_tarihi DateTime @default(now())
+
+  hareketler CariHareket[]
+}
+
+model CariHareket {
+  id            Int      @id @default(autoincrement())
+  cari_id       Int
+  adisyon_id    Int?
+  tutar         Int
+  aciklama      String?
+  tarih         DateTime @default(now())
+  kullanici_id  Int
+
+  cari      Cari      @relation(fields: [cari_id], references: [id], onDelete: Cascade)
+  adisyon   Adisyon?  @relation(fields: [adisyon_id], references: [id])
+  kullanici Kullanici @relation(fields: [kullanici_id], references: [id])
+
+  @@index([cari_id])
+}
+
+model EnvanterGiris {
+  id             Int      @id @default(autoincrement())
+  urun_id        Int
+  miktar         Int
+  birim_maliyet  Int?
+  toplam_maliyet Int?
+  tarih          DateTime @default(now())
+  aciklama       String?
+  kullanici_id   Int
+
+  urun      Urun      @relation(fields: [urun_id], references: [id])
+  kullanici Kullanici @relation(fields: [kullanici_id], references: [id])
+
+  @@index([urun_id])
+}
+
+model EnvanterCikis {
+  id                 Int @id @default(autoincrement())
+  urun_id            Int
+  adisyon_kalem_id   Int?
+  miktar             Int
+  tarih              DateTime @default(now())
+
+  urun          Urun          @relation(fields: [urun_id], references: [id])
+  adisyon_kalem AdisyonKalem? @relation(fields: [adisyon_kalem_id], references: [id])
+
+  @@index([urun_id])
+}
+
+model ProgramAyar {
+  anahtar String @id
+  deger   String
+}

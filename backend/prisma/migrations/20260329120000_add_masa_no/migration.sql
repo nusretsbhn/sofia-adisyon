@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "Adisyon" ADD COLUMN "masa_no" INTEGER NOT NULL DEFAULT 0;

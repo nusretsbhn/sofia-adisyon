@@ -1,0 +1,8 @@
+node_modules/
+dist/
+pos-app/bundled-backend/
+pos-app/release/
+*.db
+*.db-journal
+.env
+.DS_Store
