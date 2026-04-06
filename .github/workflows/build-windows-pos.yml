@@ -36,25 +36,40 @@ jobs:
       - name: Build POS frontend (Vite)
         run: npm run build --workspace pos-app
 
-      # app-builder-bin bazen workspace kurulumunda win/x64/app-builder.exe oluşturmuyor; script'leri zorla çalıştır
-      - name: Ensure app-builder-bin (Windows exe)
+      # İç içe app-builder-bin kopyaları bazen win ikilisini taşımıyor; electron-builder yanlış paketi resolve ediyor
+      - name: Fix app-builder-bin (single hoisted copy + Windows exe)
         shell: pwsh
         run: |
-          npm install app-builder-bin@5.0.0-alpha.10 --no-save --foreground-scripts
-          $exe = "node_modules/app-builder-bin/win/x64/app-builder.exe"
-          if (-not (Test-Path $exe)) {
-            Write-Host "app-builder.exe yok, klasör:"
-            Get-ChildItem -Recurse node_modules/app-builder-bin -ErrorAction SilentlyContinue | Select-Object -First 40 FullName
-            throw "app-builder.exe bulunamadi: $exe"
+          $nested = @(
+            "node_modules/electron-builder/node_modules/app-builder-bin",
+            "node_modules/app-builder-lib/node_modules/app-builder-bin",
+            "node_modules/builder-util/node_modules/app-builder-bin",
+            "node_modules/dmg-builder/node_modules/app-builder-bin",
+            "pos-app/node_modules/electron-builder/node_modules/app-builder-bin",
+            "pos-app/node_modules/app-builder-lib/node_modules/app-builder-bin",
+            "pos-app/node_modules/builder-util/node_modules/app-builder-bin",
+            "pos-app/node_modules/app-builder-bin"
+          )
+          foreach ($p in $nested) {
+            if (Test-Path $p) {
+              Write-Host "Removing nested: $p"
+              Remove-Item -Recurse -Force $p
+            }
           }
-          Write-Host "OK: $exe"
+          npm install app-builder-bin@5.0.0-alpha.10 --no-save --foreground-scripts
+          $resolved = node -e "console.log(require('app-builder-bin').appBuilderPath)"
+          Write-Host "Resolved app-builder path: $resolved"
+          if (-not (Test-Path $resolved)) {
+            Get-ChildItem -Recurse node_modules/app-builder-bin -ErrorAction SilentlyContinue | Select-Object -First 50 FullName
+            throw "app-builder binary missing: $resolved"
+          }
 
       - name: Electron Builder (Windows NSIS)
-        working-directory: pos-app
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
           CI: "false"
-        run: npx electron-builder
+        # pos-app içinden çalıştırma: require('app-builder-bin') yanlış kopyayı seçebiliyor. Kökten --projectDir kullan.
+        run: npx electron-builder --projectDir pos-app
 
       - name: List release output (debug)
         if: always()
