@@ -107,6 +107,12 @@ let backendProcess = null;
 async function startBundledBackend() {
   const userData = app.getPath("userData");
   fs.mkdirSync(userData, { recursive: true });
+  // Program Files altında prisma migrate önbelleği (node_modules/.cache) yazılamaz — EPERM.
+  // find-cache-dir: CACHE_DIR + paket adı (ör. …/prisma). TMP/TEMP de kullanıcı dizinine.
+  const tmpDir = path.join(userData, "tmp");
+  const prismaCacheRoot = path.join(userData, "prisma-cache");
+  fs.mkdirSync(tmpDir, { recursive: true });
+  fs.mkdirSync(prismaCacheRoot, { recursive: true });
 
   const dbFile = path.join(userData, "turadisyon.db");
   const databaseUrl = toPrismaDatabaseUrl(dbFile);
@@ -130,11 +136,21 @@ async function startBundledBackend() {
     DATABASE_URL: databaseUrl,
     JWT_SECRET: secrets.jwtSecret,
     JWT_REFRESH_SECRET: secrets.jwtRefreshSecret,
+    TMP: tmpDir,
+    TEMP: tmpDir,
+    CACHE_DIR: prismaCacheRoot,
     ...syncSettings,
   };
 
+  const prismaSchema = path.join(backendRoot, "prisma", "schema.prisma");
+
   try {
-    runBackendStep(process.execPath, [prismaCli, "migrate", "deploy"], backendRoot, baseEnv);
+    runBackendStep(
+      process.execPath,
+      [prismaCli, "migrate", "deploy", "--schema", prismaSchema],
+      backendRoot,
+      baseEnv
+    );
   } catch (e) {
     throw new Error("Veritabanı güncellenemedi: " + (e.message || String(e)));
   }
