@@ -14,6 +14,20 @@ jobs:
         with:
           fetch-depth: 0
 
+      # app-builder.exe sık sık Defender tarafından yanlış pozitif / karantina ile silinir → verify geçer, spawn ENOENT.
+      - name: Exclude workspace from Microsoft Defender (real-time scan)
+        shell: pwsh
+        run: |
+          $ws = $env:GITHUB_WORKSPACE
+          if ([string]::IsNullOrWhiteSpace($ws)) { $ws = (Get-Location).Path }
+          Write-Host "Defender exclusion path: $ws"
+          try {
+            Add-MpPreference -ExclusionPath $ws -ErrorAction Stop
+            Write-Host "Defender exclusion added."
+          } catch {
+            Write-Warning "Add-MpPreference failed (may need admin): $($_.Exception.Message)"
+          }
+
       - name: Enable long paths (Windows)
         shell: pwsh
         run: git config --global core.longpaths true
@@ -36,32 +50,38 @@ jobs:
       - name: Build POS frontend (Vite)
         run: npm run build --workspace pos-app
 
-      # İç içe node_modules klasörlerini silmek (junction) Windows'ta hoisted app-builder-bin'i de silebiliyor.
-      # Tek sürüm: package.json overrides + builder-util ile uyumlu 5.0.0-alpha.10.
-      - name: Verify app-builder.exe exists
-        shell: pwsh
-        run: |
-          npm ls app-builder-bin --all
-          $exe = node -e "console.log(require('path').resolve(require('app-builder-bin').appBuilderPath))"
-          Write-Host "Expected app-builder: $exe"
-          $dir = Split-Path $exe -Parent
-          if (Test-Path $dir) { Get-ChildItem $dir }
-          if (-not (Test-Path $exe)) {
-            Get-ChildItem -Recurse node_modules/app-builder-bin -ErrorAction SilentlyContinue | Select-Object -First 60 FullName
-            throw "app-builder.exe missing: $exe"
-          }
-
       - name: Electron Builder (Windows NSIS)
         shell: pwsh
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
           CI: "false"
         run: |
-          $exe = node -e "console.log(require('path').resolve(require('app-builder-bin').appBuilderPath))"
-          if (-not (Test-Path $exe)) { throw "app-builder.exe missing before build: $exe" }
-          $env:CUSTOM_APP_BUILDER_PATH = $exe
-          Write-Host "CUSTOM_APP_BUILDER_PATH=$env:CUSTOM_APP_BUILDER_PATH"
-          npx electron-builder --projectDir pos-app
+          $ErrorActionPreference = "Stop"
+          $rootAb = Join-Path (Get-Location) "node_modules\app-builder-bin"
+          $exe = Join-Path $rootAb "win\x64\app-builder.exe"
+
+          if (-not (Test-Path $exe)) {
+            Write-Host "Reinstalling app-builder-bin (missing win exe)..."
+            npm install app-builder-bin@5.0.0-alpha.10 --no-save --foreground-scripts
+          }
+          if (-not (Test-Path $exe)) {
+            throw "app-builder.exe still missing: $exe"
+          }
+
+          $len = (Get-Item $exe).Length
+          Write-Host "app-builder.exe size: $len bytes"
+          if ($len -lt 1MB) { throw "app-builder.exe looks truncated (< 1MB)" }
+
+          # Aynı shell'de gerçekten çalıştığını doğrula (Defender karantina / bozuk dosya)
+          & $exe --version
+          if ($LASTEXITCODE -ne 0) { throw "app-builder --version failed, exit $LASTEXITCODE" }
+
+          $full = (Get-Item $exe).FullName
+          $env:CUSTOM_APP_BUILDER_PATH = $full
+          Write-Host "CUSTOM_APP_BUILDER_PATH=$full"
+
+          # npx yerine doğrudan CLI — ekstra node süreci / env karmaşası azalır
+          node "$PWD\node_modules\electron-builder\cli.js" --projectDir pos-app
 
       - name: List release output (debug)
         if: always()
