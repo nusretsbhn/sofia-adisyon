@@ -39,15 +39,18 @@ function ensureSecrets(userData) {
 
 function readSyncSettings(userData) {
   const p = path.join(userData, "sync-settings.json");
+  const defaults = {
+    SYNC_ENABLED: "false",
+    SYNC_ROLE: "local",
+    SYNC_REMOTE_URL: "",
+    SYNC_SHARED_KEY: "",
+    SYNC_INTERVAL_MINUTES: "10",
+    SYNC_REQUEST_TIMEOUT_MS: "20000",
+  };
   if (!fs.existsSync(p)) {
-    return {
-      SYNC_ENABLED: "false",
-      SYNC_ROLE: "local",
-      SYNC_REMOTE_URL: "",
-      SYNC_SHARED_KEY: "",
-      SYNC_INTERVAL_MINUTES: "10",
-      SYNC_REQUEST_TIMEOUT_MS: "20000",
-    };
+    // İlk çalıştırmada dosyayı oluştur ki kullanıcı düzenleyebilsin
+    fs.writeFileSync(p, JSON.stringify(defaults, null, 2), "utf8");
+    return defaults;
   }
   try {
     const raw = JSON.parse(fs.readFileSync(p, "utf8"));
@@ -60,14 +63,8 @@ function readSyncSettings(userData) {
       SYNC_REQUEST_TIMEOUT_MS: String(raw.SYNC_REQUEST_TIMEOUT_MS ?? "20000"),
     };
   } catch {
-    return {
-      SYNC_ENABLED: "false",
-      SYNC_ROLE: "local",
-      SYNC_REMOTE_URL: "",
-      SYNC_SHARED_KEY: "",
-      SYNC_INTERVAL_MINUTES: "10",
-      SYNC_REQUEST_TIMEOUT_MS: "20000",
-    };
+    fs.writeFileSync(p, JSON.stringify(defaults, null, 2), "utf8");
+    return defaults;
   }
 }
 
