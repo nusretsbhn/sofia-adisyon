@@ -120,7 +120,7 @@ async function startBundledBackend() {
   const syncSettings = readSyncSettings(userData);
   const backendRoot = getBackendRoot();
 
-  const prismaCli = path.join(backendRoot, "node_modules", "prisma", "build", "index.js");
+  const applyMigrationsJs = path.join(backendRoot, "scripts", "apply-sqlite-migrations.mjs");
   const indexJs = path.join(backendRoot, "src", "index.js");
   const seedJs = path.join(backendRoot, "prisma", "seed.js");
 
@@ -140,20 +140,11 @@ async function startBundledBackend() {
     TEMP: tmpDir,
     CACHE_DIR: prismaCacheRoot,
     ...syncSettings,
-    // migrate deploy sırasında Prisma HTTPS (checkpoint / güncelleme kontrolü) — bazı ağlarda ECONNRESET
-    CHECKPOINT_DISABLE: "1",
-    PRISMA_HIDE_UPDATE_MESSAGE: "1",
   };
 
-  const prismaSchema = path.join(backendRoot, "prisma", "schema.prisma");
-
   try {
-    runBackendStep(
-      process.execPath,
-      [prismaCli, "migrate", "deploy", "--schema", prismaSchema],
-      backendRoot,
-      baseEnv
-    );
+    // Prisma CLI (migrate deploy) yerine sql.js — Program Files / TLS / checkpoint yok
+    runBackendStep(process.execPath, [applyMigrationsJs], backendRoot, baseEnv);
   } catch (e) {
     throw new Error("Veritabanı güncellenemedi: " + (e.message || String(e)));
   }

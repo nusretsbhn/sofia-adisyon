@@ -19,6 +19,7 @@ fs.mkdirSync(outDir, { recursive: true });
 
 fs.cpSync(path.join(backendSrc, "src"), path.join(outDir, "src"), { recursive: true });
 fs.cpSync(path.join(backendSrc, "prisma"), path.join(outDir, "prisma"), { recursive: true });
+fs.cpSync(path.join(backendSrc, "scripts"), path.join(outDir, "scripts"), { recursive: true });
 fs.copyFileSync(path.join(backendSrc, "package.json"), path.join(outDir, "package.json"));
 
 console.log("bundled-backend: npm install --omit=dev …");
