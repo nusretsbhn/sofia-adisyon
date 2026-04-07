@@ -24,6 +24,9 @@ export function normalizeYaziciInterface(port) {
   if (p.startsWith("tcp://") || p.startsWith("printer:")) return p;
   if (p.startsWith("\\\\.\\") || p.startsWith("/dev/")) return p;
   if (/^COM\d+$/i.test(p)) return `\\\\.\\${p.toUpperCase()}`;
+  // Windows'ta yazıcı adı genelde spooler üzerinden "printer:<name>" ile kullanılır.
+  // Kullanıcı sadece "kasa" yazarsa otomatik tamamla.
+  if (process.platform === "win32") return `printer:${p}`;
   return p;
 }
 
