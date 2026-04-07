@@ -166,6 +166,16 @@ export default function AdisyonDetay() {
     setYazdirMsg("");
     try {
       const { data } = await api.post(`/api/adisyonlar/${id}/yazdir`);
+      if (window.turadisyon?.printReceipt && data?.metin) {
+        const printerName = localStorage.getItem("turadisyon_printer_name") || "kasa";
+        const r = await window.turadisyon.printReceipt({
+          printerName,
+          text: data.metin,
+        });
+        setYazdirMsg(r?.ok ? "Fiş yazdırıldı." : r?.error || "Yazdırılamadı.");
+        return;
+      }
+
       if (data.yazdirildi) {
         setYazdirMsg("Fiş yazıcıya gönderildi.");
       } else {

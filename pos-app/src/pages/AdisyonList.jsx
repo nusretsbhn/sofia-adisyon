@@ -474,7 +474,17 @@ export default function AdisyonList() {
     setBusy(true);
     try {
       const { data } = await api.post(`/api/adisyonlar/${aktifId}/yazdir`);
-      setToast(data.yazdirildi ? "Yazdırıldı." : data.uyari || "Tamam.");
+      // Electron'da (Windows) termal kütüphane yerine OS yazdırmayı kullan
+      if (window.turadisyon?.printReceipt && data?.metin) {
+        const printerName = localStorage.getItem("turadisyon_printer_name") || "kasa";
+        const r = await window.turadisyon.printReceipt({
+          printerName,
+          text: data.metin,
+        });
+        setToast(r?.ok ? "Yazdırıldı." : r?.error || "Yazdırılamadı.");
+      } else {
+        setToast(data.yazdirildi ? "Yazdırıldı." : data.uyari || "Tamam.");
+      }
     } catch (e) {
       setToast(e?.response?.data?.error || "Yazdırılamadı.");
     } finally {

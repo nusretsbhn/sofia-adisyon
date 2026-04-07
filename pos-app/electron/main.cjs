@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog } = require("electron");
+const { app, BrowserWindow, dialog, ipcMain } = require("electron");
 const path = require("path");
 const fs = require("fs");
 const http = require("http");
@@ -190,6 +190,55 @@ function createWindow() {
   }
 }
 
+function escapeHtml(s) {
+  return String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+async function printReceiptViaWindows(printerName, text) {
+  const win = new BrowserWindow({
+    show: false,
+    webPreferences: {
+      sandbox: true,
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  });
+
+  const html = `<!doctype html>
+  <html><head>
+    <meta charset="utf-8" />
+    <style>
+      body { font-family: Consolas, "Courier New", monospace; font-size: 12px; margin: 0; padding: 8px; }
+      pre { white-space: pre-wrap; margin: 0; }
+    </style>
+  </head>
+  <body><pre>${escapeHtml(text || "")}</pre></body></html>`;
+
+  await win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
+
+  // deviceName: Windows yazıcı adı (ör. "kasa")
+  await new Promise((resolve, reject) => {
+    win.webContents.print(
+      {
+        silent: true,
+        printBackground: true,
+        deviceName: printerName || undefined,
+      },
+      (ok, failureReason) => {
+        if (!ok) reject(new Error(failureReason || "Print failed"));
+        else resolve();
+      },
+    );
+  });
+
+  win.destroy();
+}
+
 app.whenReady().then(async () => {
   try {
     if (app.isPackaged) {
@@ -202,6 +251,18 @@ app.whenReady().then(async () => {
   }
 
   createWindow();
+});
+
+ipcMain.handle("turadisyon:printReceipt", async (_event, payload) => {
+  const printerName = String(payload?.printerName || "").trim();
+  const text = String(payload?.text || "");
+  if (!text.trim()) return { ok: false, error: "Fiş metni boş" };
+  try {
+    await printReceiptViaWindows(printerName, text);
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e?.message || String(e) };
+  }
 });
 
 app.on("activate", () => {
