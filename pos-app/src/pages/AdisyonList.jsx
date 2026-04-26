@@ -7,6 +7,13 @@ import { tryToKurus } from "../lib/parseMoney.js";
 
 const MASA_SAYISI_STORAGE_KEY = "turadisyon_masa_sayisi";
 
+function ymdLocal(d = new Date()) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 function startOfLocalDay() {
   const d = new Date();
   d.setHours(0, 0, 0, 0);
@@ -103,7 +110,10 @@ export default function AdisyonList() {
     const start = startOfLocalDay();
     const end = endOfLocalDay();
     return list.filter((a) => {
-      if (a.durum === "ACIK") return true;
+      if (a.durum === "ACIK") {
+        const ac = a.acilis_tarihi ? new Date(a.acilis_tarihi) : null;
+        return ac && ac >= start && ac <= end;
+      }
       if (a.durum === "KAPALI") {
         const k = a.kapanma_tarihi ? new Date(a.kapanma_tarihi) : null;
         return k && k >= start && k <= end;
@@ -137,10 +147,15 @@ export default function AdisyonList() {
   }, [listMasa]);
 
   const loadList = useCallback(async () => {
+    const bugun = ymdLocal(new Date());
     try {
       const [acikRes, kapaliRes] = await Promise.all([
-        api.get("/api/adisyonlar", { params: { durum: "ACIK" } }),
-        api.get("/api/adisyonlar", { params: { durum: "KAPALI" } }),
+        api.get("/api/adisyonlar", {
+          params: { durum: "ACIK", baslangic: bugun, bitis: bugun },
+        }),
+        api.get("/api/adisyonlar", {
+          params: { durum: "KAPALI", baslangic: bugun, bitis: bugun },
+        }),
       ]);
       const tum = [...(acikRes.data.adisyonlar ?? []), ...(kapaliRes.data.adisyonlar ?? [])];
       tum.sort((a, b) => new Date(b.acilis_tarihi ?? 0) - new Date(a.acilis_tarihi ?? 0));
@@ -1117,12 +1132,8 @@ export default function AdisyonList() {
         </section>
 
         {/* Sağ: eylemler */}
-        <section className="flex flex-col gap-2 min-h-0 border border-pos-border rounded-xl p-3 bg-pos-card/40 overflow-y-auto">
-          <h2 className="text-sm font-medium text-slate-400 mb-1">İşlemler</h2>
-          <p className="text-[10px] text-slate-600 mb-2">
-            Satır işlemleri için ortada ürün seçin. Transfer modları solda.
-          </p>
-
+        <section className="min-h-0 border border-pos-border rounded-xl p-3 bg-pos-card/40 overflow-y-auto">
+          <div className="grid grid-cols-2 gap-2">
           <ActionBtn
             label="Ürün transfer"
             sub="Tek satır seç → sonra soldan dolu masa"
@@ -1216,6 +1227,7 @@ export default function AdisyonList() {
               setOdemeModal(true);
             }}
           />
+          </div>
         </section>
       </div>
 
@@ -1673,7 +1685,7 @@ function ActionBtn({ label, sub, onClick, disabled, active, primary }) {
       disabled={disabled}
       onClick={onClick}
       className={[
-        "w-full text-left rounded-lg px-3 py-2.5 border transition-colors min-h-[48px] flex flex-col justify-center",
+        "w-full rounded-lg px-2 py-2 border transition-colors min-h-[100px] flex flex-col items-center justify-center text-center",
         primary
           ? "border-emerald-500/50 bg-emerald-950/40 text-emerald-100"
           : active
@@ -1682,8 +1694,8 @@ function ActionBtn({ label, sub, onClick, disabled, active, primary }) {
         disabled ? "opacity-40 cursor-not-allowed" : "",
       ].join(" ")}
     >
-      <span className="text-sm font-semibold">{label}</span>
-      {sub && <span className="text-[10px] text-slate-500 leading-tight">{sub}</span>}
+      <span className="text-base font-semibold leading-tight">{label}</span>
+      {sub && <span className="mt-1 text-[11px] text-slate-500 leading-tight">{sub}</span>}
     </button>
   );
 }
