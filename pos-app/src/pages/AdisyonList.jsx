@@ -1028,6 +1028,12 @@ export default function AdisyonList() {
   const acikAdisyonSayisi = list.filter((a) => a.durum === "ACIK").length;
   const kapaliAdisyonSayisi = list.filter((a) => a.durum === "KAPALI").length;
   const toplamAdisyonSayisi = acikAdisyonSayisi + kapaliAdisyonSayisi;
+  const acikToplamTutar = list
+    .filter((a) => a.durum === "ACIK")
+    .reduce((s, a) => s + (a.toplam_tutar ?? 0), 0);
+  const kapaliToplamTutar = list
+    .filter((a) => a.durum === "KAPALI")
+    .reduce((s, a) => s + (a.toplam_tutar ?? 0), 0);
 
   async function kasaOzetAc() {
     setKasaModal(true);
@@ -1047,6 +1053,30 @@ export default function AdisyonList() {
     }
   }
 
+  async function adminPanelAc() {
+    const hedefUrl = (
+      localStorage.getItem("turadisyon_admin_url") ||
+      import.meta.env.VITE_ADMIN_PANEL_URL ||
+      "https://sofia-adisyon-sofia-acenta-app.tbmxzk.easypanel.host/admin/"
+    ).trim();
+    if (!hedefUrl) {
+      setToast("Admin panel adresi bulunamadı.");
+      return;
+    }
+    try {
+      if (window.turadisyon?.openExternal) {
+        const r = await window.turadisyon.openExternal(hedefUrl);
+        if (!r?.ok) {
+          setToast(r?.error || "Admin panel açılamadı.");
+        }
+        return;
+      }
+      window.open(hedefUrl, "_blank", "noopener,noreferrer");
+    } catch {
+      setToast("Admin panel açılamadı.");
+    }
+  }
+
   function kasaOzetMetniOlustur() {
     const ayir = "-".repeat(32);
     const ts = new Date().toLocaleString("tr-TR");
@@ -1057,9 +1087,8 @@ export default function AdisyonList() {
       `Tarih: ${ts}`,
       ayir,
       `Gunluk ciro : ${formatTry(kasaCiro?.ciro_kurus ?? 0)}`,
-      `Nakit      : ${formatTry(kasaCiro?.odeme_kurus?.nakit ?? 0)}`,
-      `Kredi karti: ${formatTry(kasaCiro?.odeme_kurus?.kredi_karti ?? 0)}`,
-      `Havale     : ${formatTry(kasaCiro?.odeme_kurus?.havale ?? 0)}`,
+      `Acik toplam : ${formatTry(acikToplamTutar)}`,
+      `Kapali toplam: ${formatTry(kapaliToplamTutar)}`,
       ayir,
       `Toplam adisyon: ${toplamAdisyonSayisi}`,
       `Acik adisyon : ${acikAdisyonSayisi}`,
@@ -1109,6 +1138,13 @@ export default function AdisyonList() {
             className="min-h-[40px] rounded-lg border border-pos-border px-3 text-sm text-slate-300"
           >
             Yenile
+          </button>
+          <button
+            type="button"
+            onClick={adminPanelAc}
+            className="min-h-[40px] rounded-lg border border-blue-500/40 bg-blue-950/40 px-3 text-sm text-blue-200"
+          >
+            Admin
           </button>
           <button
             type="button"
@@ -1964,19 +2000,31 @@ export default function AdisyonList() {
                     </p>
                   </div>
                   <div className="rounded-lg border border-pos-border bg-pos-bg/60 p-3">
-                    <p className="text-xs text-slate-500">Nakit</p>
+                    <p className="text-xs text-slate-500">Açık toplam tutar</p>
+                    <p className="mt-1 font-mono text-slate-200">
+                      {formatTry(acikToplamTutar)}
+                    </p>
+                  </div>
+                  <div className="rounded-lg border border-pos-border bg-pos-bg/60 p-3">
+                    <p className="text-xs text-slate-500">Kapalı toplam tutar</p>
+                    <p className="mt-1 font-mono text-slate-200">
+                      {formatTry(kapaliToplamTutar)}
+                    </p>
+                  </div>
+                  <div className="rounded-lg border border-pos-border bg-pos-bg/60 p-3">
+                    <p className="text-xs text-slate-500">Nakit (ödemesi alınan)</p>
                     <p className="mt-1 font-mono text-slate-200">
                       {formatTry(kasaCiro?.odeme_kurus?.nakit ?? 0)}
                     </p>
                   </div>
                   <div className="rounded-lg border border-pos-border bg-pos-bg/60 p-3">
-                    <p className="text-xs text-slate-500">Kredi kartı</p>
+                    <p className="text-xs text-slate-500">Kredi kartı (ödemesi alınan)</p>
                     <p className="mt-1 font-mono text-slate-200">
                       {formatTry(kasaCiro?.odeme_kurus?.kredi_karti ?? 0)}
                     </p>
                   </div>
                   <div className="rounded-lg border border-pos-border bg-pos-bg/60 p-3">
-                    <p className="text-xs text-slate-500">Havale</p>
+                    <p className="text-xs text-slate-500">Havale (ödemesi alınan)</p>
                     <p className="mt-1 font-mono text-slate-200">
                       {formatTry(kasaCiro?.odeme_kurus?.havale ?? 0)}
                     </p>

@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog, ipcMain } = require("electron");
+const { app, BrowserWindow, dialog, ipcMain, shell } = require("electron");
 const path = require("path");
 const fs = require("fs");
 const http = require("http");
@@ -259,6 +259,17 @@ ipcMain.handle("turadisyon:printReceipt", async (_event, payload) => {
   if (!text.trim()) return { ok: false, error: "Fiş metni boş" };
   try {
     await printReceiptViaWindows(printerName, text);
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e?.message || String(e) };
+  }
+});
+
+ipcMain.handle("turadisyon:openExternal", async (_event, payload) => {
+  const url = String(payload?.url || "").trim();
+  if (!url) return { ok: false, error: "URL boş" };
+  try {
+    await shell.openExternal(url);
     return { ok: true };
   } catch (e) {
     return { ok: false, error: e?.message || String(e) };
