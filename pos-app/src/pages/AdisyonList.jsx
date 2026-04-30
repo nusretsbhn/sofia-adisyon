@@ -453,19 +453,26 @@ export default function AdisyonList() {
 
     if (modMasaTransfer) {
       if (!aktifId) return;
-      if (acik) {
-        setToast("Hedef masada açık adisyon olmamalı.");
+      if (!acik) {
+        setToast("Birleştirme için hedef masada açık adisyon olmalı.");
+        return;
+      }
+      if (a.id === aktifId) {
+        setToast("Aynı adisyonla birleştirilemez.");
         return;
       }
       setBusy(true);
       try {
-        await api.post(`/api/adisyonlar/${aktifId}/masa-transfer`, { masa_no: m });
-        setToast("Masa taşındı.");
+        await api.post(`/api/adisyonlar/${aktifId}/masa-birlestir`, {
+          hedef_adisyon_id: a.id,
+        });
+        setToast("Adisyonlar birleştirildi.");
         setModMasaTransfer(false);
         await loadList();
-        await refreshDetay(aktifId);
+        setAktifId(a.id);
+        await refreshDetay(a.id);
       } catch (e) {
-        setToast(e?.response?.data?.error || "Taşıma başarısız.");
+        setToast(e?.response?.data?.error || "Birleştirme başarısız.");
       } finally {
         setBusy(false);
       }
@@ -1015,7 +1022,7 @@ export default function AdisyonList() {
   const solBaslik = modUrunTransfer
     ? "Hedef masa (dolu) seçin"
     : modMasaTransfer
-      ? "Boş masa seçin"
+      ? "Birleştirilecek açık masa seçin"
       : "Masalar";
 
   function odemeTurEtiketi(tur) {
@@ -1034,6 +1041,7 @@ export default function AdisyonList() {
   const kapaliToplamTutar = list
     .filter((a) => a.durum === "KAPALI")
     .reduce((s, a) => s + (a.toplam_tutar ?? 0), 0);
+  const canliToplamCiro = acikToplamTutar + kapaliToplamTutar;
 
   async function kasaOzetAc() {
     setKasaModal(true);
@@ -1041,7 +1049,7 @@ export default function AdisyonList() {
     setKasaErr("");
     try {
       const bugun = ymdLocal(new Date());
-      const { data } = await api.get("/api/raporlar/ciro", {
+      const { data } = await api.get("/api/adisyonlar/kasa-ozet", {
         params: { baslangic: bugun, bitis: bugun },
       });
       setKasaCiro(data);
@@ -1086,7 +1094,7 @@ export default function AdisyonList() {
       ayir,
       `Tarih: ${ts}`,
       ayir,
-      `Gunluk ciro : ${formatTry(kasaCiro?.ciro_kurus ?? 0)}`,
+      `Gunluk ciro : ${formatTry(canliToplamCiro)}`,
       `Acik toplam : ${formatTry(acikToplamTutar)}`,
       `Kapali toplam: ${formatTry(kapaliToplamTutar)}`,
       ayir,
@@ -1180,7 +1188,7 @@ export default function AdisyonList() {
             </p>
           )}
           {modMasaTransfer && (
-            <p className="text-[11px] text-amber-200/80 mb-2">Boş gri masaya dokunun.</p>
+            <p className="text-[11px] text-amber-200/80 mb-2">Birleştirilecek yeşil (açık) masaya dokunun.</p>
           )}
           <div className="flex-1 min-h-0 overflow-y-auto pr-1">
             <div className="grid grid-cols-2 gap-3 content-start">
@@ -1190,7 +1198,7 @@ export default function AdisyonList() {
                 const acik = a?.durum === "ACIK";
                 const kapali = a?.durum === "KAPALI";
                 const hedefVurgu =
-                  (modUrunTransfer && acik) || (modMasaTransfer && !acik);
+                  (modUrunTransfer && acik) || (modMasaTransfer && acik);
                 return (
                   <button
                     key={m}
@@ -1199,7 +1207,7 @@ export default function AdisyonList() {
                     onClick={() => masaHucresiTik(m)}
                     className={[
                       "rounded-xl border-2 px-3 py-2 text-left min-h-[92px] flex flex-col justify-between",
-                      modMasaTransfer && acik
+                      modMasaTransfer && !acik
                         ? "opacity-40 cursor-not-allowed border-slate-700"
                         : modUrunTransfer && !acik
                           ? "opacity-40 cursor-not-allowed border-slate-700"
@@ -1218,7 +1226,7 @@ export default function AdisyonList() {
                         {a?.musteri_adi?.trim() ||
                           (kapali ? "Ödeme alındı" : "Boş masa")}
                       </span>
-                      {acik && (
+                      {(acik || kapali) && (
                         <span className="block mt-0.5 text-[11px] font-mono text-emerald-200/90">
                           {formatTry(a.toplam_tutar ?? 0)}
                         </span>
@@ -1392,8 +1400,8 @@ export default function AdisyonList() {
           />
           <ActionBtn label="Adisyon (yazıcı)" sub="Fiş çıktısı" disabled={!aktifId || busy} onClick={yazdirAdisyon} />
           <ActionBtn
-            label="Masa transfer"
-            sub="Tüm hesabı boş masaya"
+            label="Masa birleştir"
+            sub="Açık masa seç, tüm ürünleri aktar"
             disabled={!aktifId || busy || !aktifAcik}
             active={modMasaTransfer}
             onClick={() => {
@@ -1996,7 +2004,7 @@ export default function AdisyonList() {
                   <div className="rounded-lg border border-pos-border bg-pos-bg/60 p-3">
                     <p className="text-xs text-slate-500">Günlük ciro</p>
                     <p className="mt-1 font-mono text-emerald-300">
-                      {formatTry(kasaCiro?.ciro_kurus ?? 0)}
+                      {formatTry(canliToplamCiro)}
                     </p>
                   </div>
                   <div className="rounded-lg border border-pos-border bg-pos-bg/60 p-3">

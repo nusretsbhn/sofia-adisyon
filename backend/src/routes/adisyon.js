@@ -139,6 +139,10 @@ const masaTransferSchema = z.object({
   masa_no: z.coerce.number().int().min(1).max(999),
 });
 
+const masaBirlestirSchema = z.object({
+  hedef_adisyon_id: z.number().int().positive(),
+});
+
 router.get("/", async (req, res, next) => {
   try {
     const durum = req.query.durum;
@@ -199,6 +203,55 @@ router.get("/", async (req, res, next) => {
         ...a,
         kalem_sayisi: _count.kalemler,
       })),
+    });
+  } catch (e) {
+    next(e);
+  }
+});
+
+/** POS için kasa özeti (rol bağımsız, giriş yapan kullanıcıya açık). */
+router.get("/kasa-ozet", async (req, res, next) => {
+  try {
+    const bas = parseDateOnly(req.query.baslangic);
+    const bit = parseDateOnly(req.query.bitis);
+    if ((req.query.baslangic && !bas) || (req.query.bitis && !bit)) {
+      return res.status(400).json({ error: "Geçersiz tarih (YYYY-MM-DD)" });
+    }
+    const start = bas ?? parseDateOnly(new Date().toISOString().slice(0, 10));
+    const end = endOfDayUtc(bit ?? start);
+
+    const kapali = await prisma.adisyon.findMany({
+      where: {
+        durum: "KAPALI",
+        kapanma_tarihi: { gte: start, lte: end },
+        NOT: { odeme_turu: "CARI" },
+      },
+      select: { toplam_tutar: true },
+    });
+
+    const odemeler = await prisma.odeme.findMany({
+      where: { tarih: { gte: start, lte: end } },
+      select: { odeme_turu: true, tutar: true },
+    });
+
+    const ciroToplam = kapali.reduce((s, a) => s + (a.toplam_tutar ?? 0), 0);
+    let nakit = 0;
+    let kredi = 0;
+    let havale = 0;
+    let cari = 0;
+    for (const o of odemeler) {
+      if (o.odeme_turu === "NAKIT") nakit += o.tutar;
+      else if (o.odeme_turu === "KREDI_KARTI") kredi += o.tutar;
+      else if (o.odeme_turu === "HAVALE") havale += o.tutar;
+      else if (o.odeme_turu === "CARI") cari += o.tutar;
+    }
+
+    res.json({
+      baslangic: req.query.baslangic ?? null,
+      bitis: req.query.bitis ?? null,
+      kapali_adisyon_sayisi: kapali.length,
+      ciro_kurus: ciroToplam,
+      odeme_kurus: { nakit, kredi_karti: kredi, havale, cari },
     });
   } catch (e) {
     next(e);
@@ -324,6 +377,89 @@ router.post("/:id/masa-transfer", async (req, res, next) => {
     const detay = await getAdisyonDetay(id);
     emitAdisyonEvent("adisyon:guncellendi", { adisyon: detay });
     res.json({ adisyon: detay });
+  } catch (e) {
+    next(e);
+  }
+});
+
+/** Açık adisyonu başka açık adisyonla birleştirir (tüm ürünler hedefe taşınır). */
+router.post("/:id/masa-birlestir", async (req, res, next) => {
+  try {
+    const id = parseId(req.params.id);
+    if (!id) return res.status(400).json({ error: "Geçersiz adisyon no" });
+    const parsed = masaBirlestirSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: "Geçersiz istek" });
+    }
+    const hedefId = parsed.data.hedef_adisyon_id;
+    if (hedefId === id) {
+      return res.status(400).json({ error: "Aynı adisyon birleştirilemez" });
+    }
+
+    const [kaynak, hedef] = await Promise.all([
+      prisma.adisyon.findUnique({ where: { id } }),
+      prisma.adisyon.findUnique({ where: { id: hedefId } }),
+    ]);
+    if (!kaynak || !hedef) {
+      return res.status(404).json({ error: "Adisyon bulunamadı" });
+    }
+    if (kaynak.durum !== "ACIK" || hedef.durum !== "ACIK") {
+      return res.status(409).json({ error: "Yalnızca açık adisyonlar birleştirilebilir" });
+    }
+
+    await prisma.$transaction(async (tx) => {
+      const kalemler = await tx.adisyonKalem.findMany({
+        where: { adisyon_id: id },
+        orderBy: { ekleme_tarihi: "asc" },
+      });
+
+      for (const k of kalemler) {
+        const eslesen = await tx.adisyonKalem.findFirst({
+          where: {
+            adisyon_id: hedefId,
+            urun_id: k.urun_id,
+            birim_fiyat: k.birim_fiyat,
+            ikram: k.ikram,
+            iade: k.iade,
+            fiyat_degistirildi: k.fiyat_degistirildi,
+            orijinal_fiyat: k.orijinal_fiyat,
+          },
+        });
+        if (!eslesen) {
+          await tx.adisyonKalem.update({
+            where: { id: k.id },
+            data: { adisyon_id: hedefId },
+          });
+        } else {
+          await tx.adisyonKalem.update({
+            where: { id: eslesen.id },
+            data: {
+              adet: eslesen.adet + k.adet,
+              toplam_fiyat: (eslesen.toplam_fiyat ?? 0) + (k.toplam_fiyat ?? 0),
+            },
+          });
+          await tx.adisyonKalem.delete({ where: { id: k.id } });
+        }
+      }
+
+      const ekNot = `[Birleştirildi] → ${hedef.numara}`;
+      await tx.adisyon.update({
+        where: { id },
+        data: {
+          durum: "IPTAL",
+          toplam_tutar: 0,
+          kapanma_tarihi: new Date(),
+          notlar: kaynak.notlar ? `${kaynak.notlar}\n${ekNot}` : ekNot,
+        },
+      });
+      await hesaplaAdisyonToplam(tx, hedefId);
+    });
+
+    const kaynakDetay = await getAdisyonDetay(id);
+    const hedefDetay = await getAdisyonDetay(hedefId);
+    emitAdisyonEvent("adisyon:iptal", { adisyon_id: id, adisyon: kaynakDetay });
+    emitAdisyonEvent("adisyon:guncellendi", { adisyon: hedefDetay });
+    res.json({ kaynak_adisyon: kaynakDetay, hedef_adisyon: hedefDetay });
   } catch (e) {
     next(e);
   }

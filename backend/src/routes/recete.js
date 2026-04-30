@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
-import { requireAuth, loadUser, requireKasiyerUstu } from "../middleware/auth.js";
+import { requireAuth, loadUser, requireGarsonDegil } from "../middleware/auth.js";
 
 const router = Router();
 
@@ -50,7 +50,7 @@ router.get("/urun/:urunId", requireAuth, loadUser, async (req, res, next) => {
   }
 });
 
-router.use(requireAuth, loadUser, requireKasiyerUstu);
+router.use(requireAuth, loadUser, requireGarsonDegil);
 
 /** ?urun_id= zorunlu: admin panel ile aynı veri */
 router.get("/", async (req, res, next) => {

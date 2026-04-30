@@ -33,6 +33,14 @@ export function requireKasiyerUstu(req, res, next) {
   next();
 }
 
+/** Garson hariç backoffice işlemleri (ADMIN, KASIYER, PERSONEL) */
+export function requireGarsonDegil(req, res, next) {
+  if (req.userRol === "GARSON") {
+    return res.status(403).json({ error: "Bu işlem için yetkiniz yok" });
+  }
+  next();
+}
+
 /** Veritabanından güncel kullanıcıyı yükler (requireAuth sonrası) */
 export async function loadUser(req, res, next) {
   try {

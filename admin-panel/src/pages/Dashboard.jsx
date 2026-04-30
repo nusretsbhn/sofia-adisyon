@@ -50,7 +50,7 @@ export default function Dashboard() {
       ) : (
         <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <div className="rounded-xl border border-slate-700 bg-slate-950 p-5">
-            <p className="text-sm text-slate-500">Bugün ciro (kapanan)</p>
+            <p className="text-sm text-slate-500">Bugün ciro (açık + kapalı)</p>
             <p className="mt-2 font-mono text-2xl text-emerald-400">
               {formatTry(b?.ciro_kurus ?? 0)}
             </p>
@@ -65,6 +65,18 @@ export default function Dashboard() {
             <p className="text-sm text-slate-500">Bugün kapanan adisyon</p>
             <p className="mt-2 font-mono text-2xl text-slate-200">
               {b?.kapali_adisyon_sayisi ?? 0}
+            </p>
+          </div>
+          <div className="rounded-xl border border-slate-700 bg-slate-950 p-5">
+            <p className="text-sm text-slate-500">Açık adisyon toplam tutar</p>
+            <p className="mt-2 font-mono text-xl text-blue-300">
+              {formatTry(b?.acik_toplam_kurus ?? 0)}
+            </p>
+          </div>
+          <div className="rounded-xl border border-slate-700 bg-slate-950 p-5">
+            <p className="text-sm text-slate-500">Kapalı adisyon toplam tutar</p>
+            <p className="mt-2 font-mono text-xl text-slate-200">
+              {formatTry(b?.kapali_toplam_kurus ?? 0)}
             </p>
           </div>
           <div className="rounded-xl border border-slate-700 bg-slate-950 p-5">

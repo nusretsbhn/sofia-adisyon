@@ -37,8 +37,14 @@ router.get("/dashboard", async (_req, res, next) => {
     const start = dayjs().startOf("day").toDate();
     const end = dayjs().endOf("day").toDate();
 
-    const [acikSayisi, kapaliBugun, odemelerBugun] = await Promise.all([
-      prisma.adisyon.count({ where: { durum: "ACIK" } }),
+    const [acikBugun, kapaliBugun, odemelerBugun] = await Promise.all([
+      prisma.adisyon.findMany({
+        where: {
+          durum: "ACIK",
+          acilis_tarihi: { gte: start, lte: end },
+        },
+        select: { toplam_tutar: true },
+      }),
       prisma.adisyon.findMany({
         where: {
           durum: "KAPALI",
@@ -54,7 +60,10 @@ router.get("/dashboard", async (_req, res, next) => {
       }),
     ]);
 
-    const ciroBugun = kapaliBugun.reduce((s, a) => s + a.toplam_tutar, 0);
+    const acikToplam = acikBugun.reduce((s, a) => s + (a.toplam_tutar ?? 0), 0);
+    const kapaliToplam = kapaliBugun.reduce((s, a) => s + (a.toplam_tutar ?? 0), 0);
+    const ciroBugun = acikToplam + kapaliToplam;
+    const acikAdisyonSayisi = acikBugun.length;
     const kapaliAdisyonSayisi = kapaliBugun.length;
 
     let nakit = 0;
@@ -72,6 +81,9 @@ router.get("/dashboard", async (_req, res, next) => {
       tarih: dayjs().format("YYYY-MM-DD"),
       bugun: {
         ciro_kurus: ciroBugun,
+        acik_toplam_kurus: acikToplam,
+        kapali_toplam_kurus: kapaliToplam,
+        acik_adisyon_sayisi: acikAdisyonSayisi,
         kapali_adisyon_sayisi: kapaliAdisyonSayisi,
         nakit_kurus: nakit,
         kredi_karti_kurus: krediKarti,
@@ -79,7 +91,7 @@ router.get("/dashboard", async (_req, res, next) => {
         cari_kurus: cari,
       },
       anlik: {
-        acik_adisyon_sayisi: acikSayisi,
+        acik_adisyon_sayisi: acikAdisyonSayisi,
       },
     });
   } catch (e) {

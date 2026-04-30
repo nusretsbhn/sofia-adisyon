@@ -22,6 +22,14 @@ function RequireAuth({ children }) {
   return children;
 }
 
+function getStoredUser() {
+  try {
+    return JSON.parse(localStorage.getItem("turadisyon_user") || "null");
+  } catch {
+    return null;
+  }
+}
+
 /** Garson rolü rapor / envanter / reçete sayfalarına girmesin (API zaten 403). */
 function BlockGarson({ children }) {
   try {
@@ -48,14 +56,22 @@ function BlockNonAdmin({ children }) {
   return children;
 }
 
-function Layout({ children }) {
-  const storedUser = (() => {
-    try {
-      return JSON.parse(localStorage.getItem("turadisyon_user") || "null");
-    } catch {
-      return null;
+/** Personel kullanıcı yalnızca belirli yönetim sekmelerine erişsin. */
+function BlockPersonel({ children }) {
+  try {
+    const u = getStoredUser();
+    if (u?.rol === "PERSONEL") {
+      return <Navigate to="/kategoriler" replace />;
     }
-  })();
+  } catch {
+    return <Navigate to="/kategoriler" replace />;
+  }
+  return children;
+}
+
+function Layout({ children }) {
+  const storedUser = getStoredUser();
+  const isPersonel = storedUser?.rol === "PERSONEL";
 
   function logout() {
     localStorage.removeItem("turadisyon_token");
@@ -68,23 +84,29 @@ function Layout({ children }) {
       <aside className="w-56 shrink-0 border-r border-slate-700 bg-slate-950 p-4">
         <div className="text-lg font-bold text-blue-400 mb-6">TurAdisyon</div>
         <nav className="flex flex-col gap-2 text-sm">
-          <Link className="text-slate-300 hover:text-white" to="/">
-            Ana sayfa
-          </Link>
-          {storedUser?.rol !== "GARSON" && (
+          {!isPersonel && (
+            <Link className="text-slate-300 hover:text-white" to="/">
+              Ana sayfa
+            </Link>
+          )}
+          {!isPersonel && storedUser?.rol !== "GARSON" && (
             <Link className="text-slate-300 hover:text-white" to="/raporlar">
               Raporlar
             </Link>
           )}
-          <Link className="text-slate-300 hover:text-white" to="/cariler">
-            Cariler
-          </Link>
+          {!isPersonel && (
+            <Link className="text-slate-300 hover:text-white" to="/cariler">
+              Cariler
+            </Link>
+          )}
           <Link className="text-slate-300 hover:text-white" to="/kategoriler">
             Kategoriler
           </Link>
-          <Link className="text-slate-300 hover:text-white" to="/canli-adisyonlar">
-            Canlı adisyonlar
-          </Link>
+          {!isPersonel && (
+            <Link className="text-slate-300 hover:text-white" to="/canli-adisyonlar">
+              Canlı adisyonlar
+            </Link>
+          )}
           <Link className="text-slate-300 hover:text-white" to="/urunler">
             Ürünler
           </Link>
@@ -135,9 +157,11 @@ export default function App() {
         path="/"
         element={
           <RequireAuth>
-            <Layout>
-              <Dashboard />
-            </Layout>
+            <BlockPersonel>
+              <Layout>
+                <Dashboard />
+              </Layout>
+            </BlockPersonel>
           </RequireAuth>
         }
       />
@@ -145,9 +169,11 @@ export default function App() {
         path="/cariler"
         element={
           <RequireAuth>
-            <Layout>
-              <Cariler />
-            </Layout>
+            <BlockPersonel>
+              <Layout>
+                <Cariler />
+              </Layout>
+            </BlockPersonel>
           </RequireAuth>
         }
       />
@@ -155,9 +181,11 @@ export default function App() {
         path="/cariler/:id"
         element={
           <RequireAuth>
-            <Layout>
-              <CariDetay />
-            </Layout>
+            <BlockPersonel>
+              <Layout>
+                <CariDetay />
+              </Layout>
+            </BlockPersonel>
           </RequireAuth>
         }
       />
@@ -175,9 +203,11 @@ export default function App() {
         path="/canli-adisyonlar"
         element={
           <RequireAuth>
-            <Layout>
-              <CanliAdisyonlar />
-            </Layout>
+            <BlockPersonel>
+              <Layout>
+                <CanliAdisyonlar />
+              </Layout>
+            </BlockPersonel>
           </RequireAuth>
         }
       />
@@ -207,11 +237,13 @@ export default function App() {
         path="/kullanicilar"
         element={
           <RequireAuth>
-            <BlockNonAdmin>
-              <Layout>
-                <Kullanicilar />
-              </Layout>
-            </BlockNonAdmin>
+            <BlockPersonel>
+              <BlockNonAdmin>
+                <Layout>
+                  <Kullanicilar />
+                </Layout>
+              </BlockNonAdmin>
+            </BlockPersonel>
           </RequireAuth>
         }
       />
@@ -219,11 +251,13 @@ export default function App() {
         path="/ayarlar"
         element={
           <RequireAuth>
-            <BlockNonAdmin>
-              <Layout>
-                <Ayarlar />
-              </Layout>
-            </BlockNonAdmin>
+            <BlockPersonel>
+              <BlockNonAdmin>
+                <Layout>
+                  <Ayarlar />
+                </Layout>
+              </BlockNonAdmin>
+            </BlockPersonel>
           </RequireAuth>
         }
       />
@@ -231,11 +265,13 @@ export default function App() {
         path="/raporlar"
         element={
           <RequireAuth>
-            <BlockGarson>
-              <Layout>
-                <Raporlar />
-              </Layout>
-            </BlockGarson>
+            <BlockPersonel>
+              <BlockGarson>
+                <Layout>
+                  <Raporlar />
+                </Layout>
+              </BlockGarson>
+            </BlockPersonel>
           </RequireAuth>
         }
       />

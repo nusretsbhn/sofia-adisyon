@@ -15,12 +15,6 @@ export default function Login() {
     setLoading(true);
     try {
       const { data } = await api.post("/api/auth/login", { kullanici_adi, sifre });
-      if (data.user?.rol === "PERSONEL") {
-        setErr(
-          "Bu hesap yalnızca POS için tanımlıdır. Yönetim paneline giriş yapılamaz.",
-        );
-        return;
-      }
       localStorage.setItem("turadisyon_token", data.accessToken);
       if (data.user) {
         localStorage.setItem("turadisyon_user", JSON.stringify(data.user));

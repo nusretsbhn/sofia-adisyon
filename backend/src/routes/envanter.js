@@ -1,11 +1,11 @@
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
-import { requireAuth, loadUser, requireKasiyerUstu } from "../middleware/auth.js";
+import { requireAuth, loadUser, requireGarsonDegil } from "../middleware/auth.js";
 
 const router = Router();
 
-router.use(requireAuth, loadUser, requireKasiyerUstu);
+router.use(requireAuth, loadUser, requireGarsonDegil);
 
 const girisSchema = z.object({
   urun_id: z.number().int().positive(),

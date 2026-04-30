@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
-import { requireAuth, loadUser, requireKasiyerUstu } from "../middleware/auth.js";
+import { requireAuth, loadUser, requireGarsonDegil } from "../middleware/auth.js";
 
 const router = Router();
 
@@ -89,7 +89,7 @@ router.get("/:id", async (req, res, next) => {
   }
 });
 
-router.post("/", requireKasiyerUstu, async (req, res, next) => {
+router.post("/", requireGarsonDegil, async (req, res, next) => {
   try {
     const parsed = createSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -125,7 +125,7 @@ router.post("/", requireKasiyerUstu, async (req, res, next) => {
   }
 });
 
-router.put("/:id", requireKasiyerUstu, async (req, res, next) => {
+router.put("/:id", requireGarsonDegil, async (req, res, next) => {
   try {
     const id = parseId(req.params.id);
     if (!id) return res.status(400).json({ error: "Geçersiz id" });
@@ -158,7 +158,7 @@ router.put("/:id", requireKasiyerUstu, async (req, res, next) => {
   }
 });
 
-router.delete("/:id", requireKasiyerUstu, async (req, res, next) => {
+router.delete("/:id", requireGarsonDegil, async (req, res, next) => {
   try {
     const id = parseId(req.params.id);
     if (!id) return res.status(400).json({ error: "Geçersiz id" });
