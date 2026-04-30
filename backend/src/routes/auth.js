@@ -13,6 +13,10 @@ const loginSchema = z.object({
   sifre: z.string().min(1),
 });
 
+const confirmPasswordSchema = z.object({
+  sifre: z.string().min(1),
+});
+
 router.post("/login", async (req, res, next) => {
   try {
     const parsed = loginSchema.safeParse(req.body);
@@ -56,6 +60,29 @@ router.post("/logout", (_req, res) => {
 
 router.get("/me", requireAuth, loadUser, (req, res) => {
   res.json({ user: req.user });
+});
+
+router.post("/confirm-password", requireAuth, loadUser, async (req, res, next) => {
+  try {
+    const parsed = confirmPasswordSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: "Geçersiz istek" });
+    }
+    const user = await prisma.kullanici.findUnique({
+      where: { id: req.user.id },
+      select: { sifre_hash: true, aktif: true },
+    });
+    if (!user || !user.aktif) {
+      return res.status(401).json({ error: "Kullanıcı bulunamadı veya pasif" });
+    }
+    const ok = await bcrypt.compare(parsed.data.sifre, user.sifre_hash);
+    if (!ok) {
+      return res.status(401).json({ error: "Şifre hatalı" });
+    }
+    res.json({ ok: true });
+  } catch (e) {
+    next(e);
+  }
 });
 
 export default router;

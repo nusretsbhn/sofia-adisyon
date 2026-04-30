@@ -6,6 +6,7 @@ import { formatTry } from "../lib/format.js";
 import { tryToKurus } from "../lib/parseMoney.js";
 
 const MASA_SAYISI_STORAGE_KEY = "turadisyon_masa_sayisi";
+const POS_RESET_AT_STORAGE_KEY = "turadisyon_pos_reset_at";
 
 function ymdLocal(d = new Date()) {
   const y = d.getFullYear();
@@ -110,26 +111,37 @@ export default function AdisyonList() {
   const [kasaErr, setKasaErr] = useState("");
   const [kasaCiro, setKasaCiro] = useState(null);
   const [kasaPrinting, setKasaPrinting] = useState(false);
+  const [kasaSifreModal, setKasaSifreModal] = useState(false);
+  const [kasaSifre, setKasaSifre] = useState("");
+  const [kasaSifreErr, setKasaSifreErr] = useState("");
+  const [kasaSifreBusy, setKasaSifreBusy] = useState(false);
+  const [manuelResetAt, setManuelResetAt] = useState(() => {
+    const raw = localStorage.getItem(POS_RESET_AT_STORAGE_KEY);
+    if (!raw) return "";
+    const d = new Date(raw);
+    return Number.isNaN(d.getTime()) ? "" : d.toISOString();
+  });
 
   const gunRef = useRef(
     `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}-${String(new Date().getDate()).padStart(2, "0")}`,
   );
 
   const listMasa = useMemo(() => {
-    const start = startOfLocalDay();
-    const end = endOfLocalDay();
+    const resetKesim = manuelResetAt ? new Date(manuelResetAt) : null;
     return list.filter((a) => {
       if (a.durum === "ACIK") {
         const ac = a.acilis_tarihi ? new Date(a.acilis_tarihi) : null;
-        return ac && ac >= start && ac <= end;
+        if (!ac) return false;
+        return resetKesim ? ac >= resetKesim : true;
       }
       if (a.durum === "KAPALI") {
         const k = a.kapanma_tarihi ? new Date(a.kapanma_tarihi) : null;
-        return k && k >= start && k <= end;
+        if (!k) return false;
+        return resetKesim ? k >= resetKesim : true;
       }
       return false;
     });
-  }, [list]);
+  }, [list, manuelResetAt]);
 
   const masaAdisyon = useMemo(() => {
     const m = new Map();
@@ -156,14 +168,13 @@ export default function AdisyonList() {
   }, [listMasa]);
 
   const loadList = useCallback(async () => {
-    const bugun = ymdLocal(new Date());
     try {
       const [acikRes, kapaliRes] = await Promise.all([
         api.get("/api/adisyonlar", {
-          params: { durum: "ACIK", baslangic: bugun, bitis: bugun },
+          params: { durum: "ACIK" },
         }),
         api.get("/api/adisyonlar", {
-          params: { durum: "KAPALI", baslangic: bugun, bitis: bugun },
+          params: { durum: "KAPALI" },
         }),
       ]);
       const tum = [...(acikRes.data.adisyonlar ?? []), ...(kapaliRes.data.adisyonlar ?? [])];
@@ -194,29 +205,16 @@ export default function AdisyonList() {
   }, [loadList]);
 
   useEffect(() => {
-    const t = setInterval(() => {
-      const d = new Date();
-      const g = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-      if (g !== gunRef.current) {
-        gunRef.current = g;
-        setAktifId(null);
-        setDetay(null);
-        setSeciliKalemIds([]);
-        setSeciliBolAdet({});
-        setOdemeModal(false);
-        setOdenenKalemler([]);
-        setModUrunTransfer(false);
-        setModMasaTransfer(false);
-        setToast("Yeni gün: masalar güncellendi.");
-        loadList();
-      }
-    }, 15000);
-    return () => clearInterval(t);
-  }, [loadList]);
-
-  useEffect(() => {
     localStorage.setItem(MASA_SAYISI_STORAGE_KEY, String(masaSayisi));
   }, [masaSayisi]);
+
+  useEffect(() => {
+    if (manuelResetAt) {
+      localStorage.setItem(POS_RESET_AT_STORAGE_KEY, manuelResetAt);
+    } else {
+      localStorage.removeItem(POS_RESET_AT_STORAGE_KEY);
+    }
+  }, [manuelResetAt]);
 
   /** Ürün ekleme vb. dönüşte bu adisyon seçili kalsın */
   useEffect(() => {
@@ -1032,13 +1030,13 @@ export default function AdisyonList() {
     return tur ?? "";
   }
   const aktifAcik = detay?.durum === "ACIK";
-  const acikAdisyonSayisi = list.filter((a) => a.durum === "ACIK").length;
-  const kapaliAdisyonSayisi = list.filter((a) => a.durum === "KAPALI").length;
+  const acikAdisyonSayisi = listMasa.filter((a) => a.durum === "ACIK").length;
+  const kapaliAdisyonSayisi = listMasa.filter((a) => a.durum === "KAPALI").length;
   const toplamAdisyonSayisi = acikAdisyonSayisi + kapaliAdisyonSayisi;
-  const acikToplamTutar = list
+  const acikToplamTutar = listMasa
     .filter((a) => a.durum === "ACIK")
     .reduce((s, a) => s + (a.toplam_tutar ?? 0), 0);
-  const kapaliToplamTutar = list
+  const kapaliToplamTutar = listMasa
     .filter((a) => a.durum === "KAPALI")
     .reduce((s, a) => s + (a.toplam_tutar ?? 0), 0);
   const canliToplamCiro = acikToplamTutar + kapaliToplamTutar;
@@ -1123,10 +1121,47 @@ export default function AdisyonList() {
         text: kasaOzetMetniOlustur(),
       });
       setToast(r?.ok ? "Kasa özeti yazdırıldı." : r?.error || "Kasa özeti yazdırılamadı.");
+      return !!r?.ok;
     } catch (e) {
       setToast(e?.message || "Kasa özeti yazdırılamadı.");
+      return false;
     } finally {
       setKasaPrinting(false);
+    }
+  }
+
+  async function kasaYazdirOnayla() {
+    const sifre = String(kasaSifre || "").trim();
+    if (!sifre) {
+      setKasaSifreErr("Şifre girin.");
+      return;
+    }
+    setKasaSifreBusy(true);
+    setKasaSifreErr("");
+    try {
+      await api.post("/api/auth/confirm-password", { sifre });
+      const ok = await kasaOzetYazdir();
+      if (!ok) return;
+
+      const nowIso = new Date().toISOString();
+      setManuelResetAt(nowIso);
+      setAktifId(null);
+      setDetay(null);
+      setSeciliKalemIds([]);
+      setSeciliBolAdet({});
+      setOdemeModal(false);
+      setOdenenKalemler([]);
+      setModUrunTransfer(false);
+      setModMasaTransfer(false);
+      setKasaSifre("");
+      setKasaSifreModal(false);
+      setKasaModal(false);
+      await loadList();
+      setToast("Kasa yazdırıldı. Adisyon ekranı sıfırlandı.");
+    } catch (e) {
+      setKasaSifreErr(e?.response?.data?.error || "Şifre doğrulanamadı.");
+    } finally {
+      setKasaSifreBusy(false);
     }
   }
 
@@ -2065,13 +2100,63 @@ export default function AdisyonList() {
                     type="button"
                     disabled={kasaPrinting || kasaLoading}
                     className="flex-1 min-h-[44px] rounded-lg bg-emerald-700 text-white disabled:opacity-50"
-                    onClick={kasaOzetYazdir}
+                    onClick={() => {
+                      setKasaSifre("");
+                      setKasaSifreErr("");
+                      setKasaSifreModal(true);
+                    }}
                   >
                     {kasaPrinting ? "Yazdırılıyor..." : "Yazdır"}
                   </button>
                 </div>
               </>
             )}
+          </div>
+        </div>
+      )}
+
+      {kasaSifreModal && (
+        <div
+          className="fixed inset-0 z-[70] flex items-center justify-center bg-black/85 p-4"
+          role="dialog"
+          aria-modal="true"
+          onClick={() => !kasaSifreBusy && setKasaSifreModal(false)}
+        >
+          <div
+            className="w-full max-w-sm rounded-xl border border-pos-border bg-pos-card p-5 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-lg font-semibold text-slate-100">Kasa yazdırma onayı</h3>
+            <p className="mt-1 text-sm text-slate-500">
+              Devam için aktif kullanıcının şifresini girin.
+            </p>
+            {kasaSifreErr && <p className="mt-2 text-sm text-red-400">{kasaSifreErr}</p>}
+            <input
+              type="password"
+              className="mt-3 w-full min-h-[48px] rounded-lg border border-pos-border bg-pos-bg px-3 text-slate-100"
+              value={kasaSifre}
+              onChange={(e) => setKasaSifre(e.target.value)}
+              placeholder="Şifre"
+              autoFocus
+            />
+            <div className="mt-4 flex gap-2">
+              <button
+                type="button"
+                disabled={kasaSifreBusy}
+                className="flex-1 min-h-[44px] rounded-lg border border-pos-border text-slate-300 disabled:opacity-50"
+                onClick={() => setKasaSifreModal(false)}
+              >
+                İptal
+              </button>
+              <button
+                type="button"
+                disabled={kasaSifreBusy}
+                className="flex-1 min-h-[44px] rounded-lg bg-emerald-700 text-white disabled:opacity-50"
+                onClick={kasaYazdirOnayla}
+              >
+                {kasaSifreBusy ? "Kontrol..." : "Onayla"}
+              </button>
+            </div>
           </div>
         </div>
       )}
