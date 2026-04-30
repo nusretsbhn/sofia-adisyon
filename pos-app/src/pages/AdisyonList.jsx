@@ -79,6 +79,8 @@ export default function AdisyonList() {
 
   const [iadeModal, setIadeModal] = useState(null);
   const [iadeAdet, setIadeAdet] = useState("1");
+  const [ikramModal, setIkramModal] = useState(null);
+  const [ikramAdet, setIkramAdet] = useState("1");
 
   const [fiyatModal, setFiyatModal] = useState(null);
   const [fiyatStr, setFiyatStr] = useState("");
@@ -101,6 +103,11 @@ export default function AdisyonList() {
   /** Hesap böl: satır id -> taşınacak adet */
   const [seciliBolAdet, setSeciliBolAdet] = useState({});
   const [bolAdetModal, setBolAdetModal] = useState(null);
+  const [transferAdetModal, setTransferAdetModal] = useState(null);
+  const [kasaModal, setKasaModal] = useState(false);
+  const [kasaLoading, setKasaLoading] = useState(false);
+  const [kasaErr, setKasaErr] = useState("");
+  const [kasaCiro, setKasaCiro] = useState(null);
 
   const gunRef = useRef(
     `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}-${String(new Date().getDate()).padStart(2, "0")}`,
@@ -278,12 +285,13 @@ export default function AdisyonList() {
       });
       return;
     }
-    if (k.adet > 1) {
+    // Parçalı adet popup'ı sadece ödeme ekranında (hesap böl) gösterilsin.
+    if (odemeModal && k.adet > 1) {
       setBolAdetModal({ kalemId: id, max: k.adet, value: String(k.adet) });
       return;
     }
     setSeciliKalemIds((prev) => [...prev, id]);
-    setSeciliBolAdet((prev) => ({ ...prev, [id]: 1 }));
+    setSeciliBolAdet((prev) => ({ ...prev, [id]: k.adet }));
   }
 
   function bolAdetModalOnayla() {
@@ -420,14 +428,17 @@ export default function AdisyonList() {
         setToast("Aynı adisyona taşınamaz.");
         return;
       }
+      const adet = seciliBolAdet[sec.id] ?? sec.adet;
       setBusy(true);
       try {
         await api.post(`/api/adisyonlar/${aktifId}/kalemler/${sec.id}/transfer`, {
           hedef_adisyon_id: a.id,
+          adet,
         });
         setToast("Ürün transfer edildi.");
         setModUrunTransfer(false);
         setSeciliKalemIds([]);
+        setSeciliBolAdet({});
         await loadList();
         await refreshDetay(aktifId);
       } catch (e) {
@@ -467,6 +478,35 @@ export default function AdisyonList() {
       return;
     }
     bosMasayaTikla(m);
+  }
+
+  function urunTransferBaslat() {
+    if (!aktifId || !detay) {
+      setToast("Önce bir adisyon seçin.");
+      return;
+    }
+    const sec = tekSecilenKalem();
+    if (!sec) {
+      setToast("Önce tek bir ürün satırı seçin.");
+      return;
+    }
+    setTransferAdetModal({ kalemId: sec.id, max: sec.adet, value: String(sec.adet) });
+  }
+
+  function transferAdetModalOnayla() {
+    if (!transferAdetModal || !detay) return;
+    const n = Number.parseInt(String(transferAdetModal.value), 10);
+    if (!Number.isInteger(n) || n < 1 || n > transferAdetModal.max) {
+      setToast(`1–${transferAdetModal.max} arası adet girin.`);
+      return;
+    }
+    const kid = transferAdetModal.kalemId;
+    setSeciliKalemIds((prev) => (prev.includes(kid) ? prev : [kid]));
+    setSeciliBolAdet((prev) => ({ ...prev, [kid]: n }));
+    setModMasaTransfer(false);
+    setModUrunTransfer(true);
+    setTransferAdetModal(null);
+    setToast("Şimdi soldan hedef dolu masayı seçin.");
   }
 
   async function kaydetNot() {
@@ -521,15 +561,45 @@ export default function AdisyonList() {
       setToast("İade satırına ikram uygulanamaz.");
       return;
     }
+    if (k.adet > 1) {
+      setIkramAdet("1");
+      setIkramModal({ id: k.id, max: k.adet });
+      return;
+    }
     setBusy(true);
     try {
-      await api.patch(`/api/adisyonlar/${aktifId}/kalemler/${k.id}`, { ikram: true });
+      await api.post(`/api/adisyonlar/${aktifId}/kalemler/${k.id}/ikram`, { adet: 1 });
       setToast("İkram olarak işaretlendi.");
       setSeciliKalemIds([]);
+      setSeciliBolAdet({});
       await refreshDetay(aktifId);
       await loadList();
     } catch (e) {
       setToast(e?.response?.data?.error || "İşlem başarısız.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function ikramUygula() {
+    if (!ikramModal || !aktifId) return;
+    const { id: kid, max } = ikramModal;
+    const n = Number.parseInt(String(ikramAdet), 10);
+    if (!Number.isInteger(n) || n < 1 || n > max) {
+      setToast(`1–${max} arası adet girin.`);
+      return;
+    }
+    setBusy(true);
+    try {
+      await api.post(`/api/adisyonlar/${aktifId}/kalemler/${kid}/ikram`, { adet: n });
+      setIkramModal(null);
+      setToast("İkram uygulandı.");
+      setSeciliKalemIds([]);
+      setSeciliBolAdet({});
+      await refreshDetay(aktifId);
+      await loadList();
+    } catch (e) {
+      setToast(e?.response?.data?.error || "İkram yapılamadı.");
     } finally {
       setBusy(false);
     }
@@ -939,7 +1009,35 @@ export default function AdisyonList() {
     : modMasaTransfer
       ? "Boş masa seçin"
       : "Masalar";
+
+  function odemeTurEtiketi(tur) {
+    if (tur === "NAKIT") return "Nakit";
+    if (tur === "KREDI_KARTI") return "Kredi kartı";
+    if (tur === "HAVALE") return "Havale";
+    return tur ?? "";
+  }
   const aktifAcik = detay?.durum === "ACIK";
+  const acikAdisyonSayisi = list.filter((a) => a.durum === "ACIK").length;
+  const kapaliAdisyonSayisi = list.filter((a) => a.durum === "KAPALI").length;
+  const toplamAdisyonSayisi = acikAdisyonSayisi + kapaliAdisyonSayisi;
+
+  async function kasaOzetAc() {
+    setKasaModal(true);
+    setKasaLoading(true);
+    setKasaErr("");
+    try {
+      const bugun = ymdLocal(new Date());
+      const { data } = await api.get("/api/raporlar/ciro", {
+        params: { baslangic: bugun, bitis: bugun },
+      });
+      setKasaCiro(data);
+    } catch {
+      setKasaErr("Kasa özeti alınamadı.");
+      setKasaCiro(null);
+    } finally {
+      setKasaLoading(false);
+    }
+  }
 
   return (
     <div className="h-screen bg-pos-bg flex flex-col overflow-hidden">
@@ -1025,10 +1123,17 @@ export default function AdisyonList() {
                     ].join(" ")}
                   >
                     <span className="text-2xl font-bold tabular-nums leading-none">{m}</span>
-                    <span className="text-xs truncate">
-                      {a?.musteri_adi?.trim() ||
-                        (kapali ? "Ödeme alındı" : "Boş masa")}
-                    </span>
+                    <div className="min-h-[30px]">
+                      <span className="block text-xs truncate">
+                        {a?.musteri_adi?.trim() ||
+                          (kapali ? "Ödeme alındı" : "Boş masa")}
+                      </span>
+                      {acik && (
+                        <span className="block mt-0.5 text-[11px] font-mono text-emerald-200/90">
+                          {formatTry(a.toplam_tutar ?? 0)}
+                        </span>
+                      )}
+                    </div>
                   </button>
                 );
               })}
@@ -1127,6 +1232,13 @@ export default function AdisyonList() {
               >
                 Adisyon kapat (ürün yoksa)
               </button>
+              <button
+                type="button"
+                onClick={kasaOzetAc}
+                className="mt-2 w-full min-h-[48px] rounded-xl border border-emerald-600/40 bg-emerald-950/30 text-sm font-semibold text-emerald-200"
+              >
+                Kasa
+              </button>
             </>
           )}
         </section>
@@ -1139,10 +1251,7 @@ export default function AdisyonList() {
             sub="Tek satır seç → sonra soldan dolu masa"
             disabled={!aktifId || busy || !aktifAcik}
             active={modUrunTransfer}
-            onClick={() => {
-              setModMasaTransfer(false);
-              setModUrunTransfer((v) => !v);
-            }}
+            onClick={urunTransferBaslat}
           />
           <ActionBtn
             label="İade"
@@ -1335,6 +1444,31 @@ export default function AdisyonList() {
         </div>
       )}
 
+      {ikramModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4" onClick={() => setIkramModal(null)}>
+          <div className="w-full max-w-sm rounded-xl border border-pos-border bg-pos-card p-5" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-lg font-semibold text-slate-100">İkram adedi</h3>
+            <p className="text-sm text-slate-500 mt-1">En fazla {ikramModal.max} adet</p>
+            <input
+              type="number"
+              min={1}
+              max={ikramModal.max}
+              className="mt-3 w-full min-h-[48px] rounded-lg border border-pos-border bg-pos-bg px-3"
+              value={ikramAdet}
+              onChange={(e) => setIkramAdet(e.target.value)}
+            />
+            <div className="mt-4 flex gap-2">
+              <button type="button" className="flex-1 min-h-[44px] rounded-lg border border-pos-border" onClick={() => setIkramModal(null)}>
+                İptal
+              </button>
+              <button type="button" className="flex-1 min-h-[44px] rounded-lg bg-amber-700 text-white" onClick={ikramUygula}>
+                Uygula
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {bolAdetModal && (
         <div
           className="fixed inset-0 z-[55] flex items-center justify-center bg-black/75 p-4"
@@ -1372,6 +1506,49 @@ export default function AdisyonList() {
                 onClick={bolAdetModalOnayla}
               >
                 Seç
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {transferAdetModal && (
+        <div
+          className="fixed inset-0 z-[56] flex items-center justify-center bg-black/75 p-4"
+          onClick={() => setTransferAdetModal(null)}
+        >
+          <div
+            className="w-full max-w-sm rounded-xl border border-pos-border bg-pos-card p-5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-lg font-semibold text-slate-100">Transfer adedi</h3>
+            <p className="text-sm text-slate-500 mt-1">
+              Bu satırdan kaç adet taşınacak? (en fazla {transferAdetModal.max})
+            </p>
+            <input
+              type="number"
+              min={1}
+              max={transferAdetModal.max}
+              className="mt-3 w-full min-h-[48px] rounded-lg border border-pos-border bg-pos-bg px-3"
+              value={transferAdetModal.value}
+              onChange={(e) =>
+                setTransferAdetModal((m) => (m ? { ...m, value: e.target.value } : m))
+              }
+            />
+            <div className="mt-4 flex gap-2">
+              <button
+                type="button"
+                className="flex-1 min-h-[44px] rounded-lg border border-pos-border"
+                onClick={() => setTransferAdetModal(null)}
+              >
+                İptal
+              </button>
+              <button
+                type="button"
+                className="flex-1 min-h-[44px] rounded-lg bg-sky-700 text-white"
+                onClick={transferAdetModalOnayla}
+              >
+                Devam
               </button>
             </div>
           </div>
@@ -1538,6 +1715,14 @@ export default function AdisyonList() {
                   >
                     Kredi kartı
                   </button>
+                  <button
+                    type="button"
+                    disabled={odemePaying}
+                    className="min-h-[48px] rounded-lg bg-indigo-700/80 text-white font-semibold border border-indigo-500/40"
+                    onClick={() => setOdemeOnay({ type: "tam", tur: "HAVALE" })}
+                  >
+                    Havale
+                  </button>
                 </div>
               </div>
 
@@ -1590,6 +1775,14 @@ export default function AdisyonList() {
                   >
                     Seçilen → Kart
                   </button>
+                  <button
+                    type="button"
+                    disabled={odemePaying || secilenToplam() <= 0}
+                    className="min-h-[48px] rounded-lg bg-indigo-900/70 text-white text-sm font-medium border border-indigo-500/30"
+                    onClick={() => secilenlereOdemeIste("HAVALE")}
+                  >
+                    Seçilen → Havale
+                  </button>
                 </div>
                 <p className="text-[10px] text-slate-600 mt-2">
                   Seçilenler yeni bir adisyona bölünür ve o kısım tahsil edilir; kalan satırlar bu masada kalır.
@@ -1634,10 +1827,10 @@ export default function AdisyonList() {
             </h3>
             <p className="mt-1 text-sm font-medium text-emerald-400/90">
               {odemeOnay.type === "tam" &&
-                (odemeOnay.tur === "NAKIT" ? "Nakit ödeme" : "Kredi kartı ödemesi")}
+                `${odemeTurEtiketi(odemeOnay.tur)} ödemesi`}
               {odemeOnay.type === "karisik-tam" && "Karışık ödeme (nakit + kart)"}
               {odemeOnay.type === "sec" &&
-                (odemeOnay.tur === "NAKIT" ? "Seçilen satırlar → Nakit" : "Seçilen satırlar → Kart")}
+                `Seçilen satırlar → ${odemeTurEtiketi(odemeOnay.tur)}`}
               {odemeOnay.type === "sec-karisik" && "Seçilen satırlar → Karışık ödeme"}
               {odemeOnay.type === "cari" && "Cari hesaba işle"}
             </p>
@@ -1671,6 +1864,79 @@ export default function AdisyonList() {
                 {odemePaying ? "…" : "Evet, onaylıyorum"}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {kasaModal && (
+        <div
+          className="fixed inset-0 z-[65] flex items-center justify-center bg-black/80 p-4"
+          role="dialog"
+          aria-modal="true"
+          onClick={() => setKasaModal(false)}
+        >
+          <div
+            className="w-full max-w-md rounded-xl border border-pos-border bg-pos-card p-5 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-2">
+              <h3 className="text-lg font-semibold text-slate-100">Kasa özeti (bugün)</h3>
+              <button
+                type="button"
+                className="text-sm text-slate-400 hover:text-slate-200"
+                onClick={() => setKasaModal(false)}
+              >
+                Kapat
+              </button>
+            </div>
+
+            {kasaLoading ? (
+              <p className="mt-4 text-slate-500">Yükleniyor…</p>
+            ) : (
+              <>
+                {kasaErr && <p className="mt-3 text-sm text-amber-400">{kasaErr}</p>}
+                <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
+                  <div className="rounded-lg border border-pos-border bg-pos-bg/60 p-3">
+                    <p className="text-xs text-slate-500">Günlük ciro</p>
+                    <p className="mt-1 font-mono text-emerald-300">
+                      {formatTry(kasaCiro?.ciro_kurus ?? 0)}
+                    </p>
+                  </div>
+                  <div className="rounded-lg border border-pos-border bg-pos-bg/60 p-3">
+                    <p className="text-xs text-slate-500">Nakit</p>
+                    <p className="mt-1 font-mono text-slate-200">
+                      {formatTry(kasaCiro?.odeme_kurus?.nakit ?? 0)}
+                    </p>
+                  </div>
+                  <div className="rounded-lg border border-pos-border bg-pos-bg/60 p-3">
+                    <p className="text-xs text-slate-500">Kredi kartı</p>
+                    <p className="mt-1 font-mono text-slate-200">
+                      {formatTry(kasaCiro?.odeme_kurus?.kredi_karti ?? 0)}
+                    </p>
+                  </div>
+                  <div className="rounded-lg border border-pos-border bg-pos-bg/60 p-3">
+                    <p className="text-xs text-slate-500">Havale</p>
+                    <p className="mt-1 font-mono text-slate-200">
+                      {formatTry(kasaCiro?.odeme_kurus?.havale ?? 0)}
+                    </p>
+                  </div>
+                  <div className="rounded-lg border border-pos-border bg-pos-bg/60 p-3">
+                    <p className="text-xs text-slate-500">Toplam adisyon</p>
+                    <p className="mt-1 font-mono text-slate-200">
+                      {toplamAdisyonSayisi}
+                    </p>
+                  </div>
+                  <div className="rounded-lg border border-pos-border bg-pos-bg/60 p-3">
+                    <p className="text-xs text-slate-500">Açık adisyon</p>
+                    <p className="mt-1 font-mono text-slate-200">{acikAdisyonSayisi}</p>
+                  </div>
+                  <div className="rounded-lg border border-pos-border bg-pos-bg/60 p-3">
+                    <p className="text-xs text-slate-500">Kapalı adisyon</p>
+                    <p className="mt-1 font-mono text-slate-200">{kapaliAdisyonSayisi}</p>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}

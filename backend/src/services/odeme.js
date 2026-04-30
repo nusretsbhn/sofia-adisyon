@@ -20,7 +20,7 @@ export async function tamamlaOdemeVeKapat(tx, { adisyonId, kullaniciId, odeme_tu
   const odemeKayitlari = [];
 
   if (tutarOdenecek > 0) {
-    if (odeme_turu === "NAKIT" || odeme_turu === "KREDI_KARTI") {
+    if (odeme_turu === "NAKIT" || odeme_turu === "KREDI_KARTI" || odeme_turu === "HAVALE") {
       const o = await tx.odeme.create({
         data: {
           adisyon_id: adisyonId,

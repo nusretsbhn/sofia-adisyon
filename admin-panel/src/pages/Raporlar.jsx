@@ -210,9 +210,10 @@ export default function Raporlar() {
               <p className="font-mono text-lg">{formatTry(ciro.odeme_kurus?.nakit)}</p>
             </div>
             <div className="rounded-lg border border-slate-700 bg-slate-950 p-4">
-              <p className="text-xs text-slate-500">Kart / Cari</p>
+              <p className="text-xs text-slate-500">Kart / Havale / Cari</p>
               <p className="font-mono text-sm text-slate-300">
-                K: {formatTry(ciro.odeme_kurus?.kredi_karti)} · C:{" "}
+                Kart: {formatTry(ciro.odeme_kurus?.kredi_karti)} · Havale:{" "}
+                {formatTry(ciro.odeme_kurus?.havale)} · Cari:{" "}
                 {formatTry(ciro.odeme_kurus?.cari)}
               </p>
             </div>

@@ -60,10 +60,12 @@ router.get("/dashboard", async (_req, res, next) => {
     let nakit = 0;
     let krediKarti = 0;
     let cari = 0;
+    let havale = 0;
     for (const o of odemelerBugun) {
       if (o.odeme_turu === "NAKIT") nakit += o.tutar;
       else if (o.odeme_turu === "KREDI_KARTI") krediKarti += o.tutar;
       else if (o.odeme_turu === "CARI") cari += o.tutar;
+      else if (o.odeme_turu === "HAVALE") havale += o.tutar;
     }
 
     res.json({
@@ -73,6 +75,7 @@ router.get("/dashboard", async (_req, res, next) => {
         kapali_adisyon_sayisi: kapaliAdisyonSayisi,
         nakit_kurus: nakit,
         kredi_karti_kurus: krediKarti,
+        havale_kurus: havale,
         cari_kurus: cari,
       },
       anlik: {
@@ -107,10 +110,12 @@ router.get("/ciro", async (req, res, next) => {
     let nakit = 0;
     let kredi = 0;
     let cari = 0;
+    let havale = 0;
     for (const o of odemeler) {
       if (o.odeme_turu === "NAKIT") nakit += o.tutar;
       else if (o.odeme_turu === "KREDI_KARTI") kredi += o.tutar;
       else if (o.odeme_turu === "CARI") cari += o.tutar;
+      else if (o.odeme_turu === "HAVALE") havale += o.tutar;
     }
 
     const json = {
@@ -118,7 +123,7 @@ router.get("/ciro", async (req, res, next) => {
       bitis: r.bitis,
       kapali_adisyon_sayisi: kapali.length,
       ciro_kurus: ciroToplam,
-      odeme_kurus: { nakit, kredi_karti: kredi, cari },
+      odeme_kurus: { nakit, kredi_karti: kredi, havale, cari },
     };
 
     if (req.query.format === "csv") {
@@ -132,6 +137,7 @@ router.get("/ciro", async (req, res, next) => {
         csvSatir(["Ödeme kayıtları (tarih aralığında)", ""]),
         csvSatir(["Nakit (TL)", kurusToTl(nakit)]),
         csvSatir(["Kredi kartı (TL)", kurusToTl(kredi)]),
+        csvSatir(["Havale (TL)", kurusToTl(havale)]),
         csvSatir(["Cari (TL)", kurusToTl(cari)]),
       ];
       res.setHeader("Content-Type", "text/csv; charset=utf-8");

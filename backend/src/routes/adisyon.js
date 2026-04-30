@@ -80,6 +80,7 @@ const kalemPatchSchema = z.object({
 const odemeBodySchema = z.discriminatedUnion("odeme_turu", [
   z.object({ odeme_turu: z.literal("NAKIT") }),
   z.object({ odeme_turu: z.literal("KREDI_KARTI") }),
+  z.object({ odeme_turu: z.literal("HAVALE") }),
   z.object({
     odeme_turu: z.literal("CARI"),
     cari_id: z.number().int().positive(),
@@ -125,8 +126,13 @@ const iadeKalemSchema = z.object({
   adet: z.number().int().min(1).max(999),
 });
 
+const ikramKalemSchema = z.object({
+  adet: z.number().int().min(1).max(999),
+});
+
 const transferKalemSchema = z.object({
   hedef_adisyon_id: z.number().int().positive(),
+  adet: z.number().int().min(1).max(999).optional(),
 });
 
 const masaTransferSchema = z.object({
@@ -578,11 +584,46 @@ router.post("/:id/kalemler/:kid/transfer", async (req, res, next) => {
       return res.status(404).json({ error: "Satır bulunamadı" });
     }
 
+    const adetTransfer = parsed.data.adet ?? kalem.adet;
+    if (adetTransfer < 1 || adetTransfer > kalem.adet) {
+      return res.status(400).json({ error: "Geçersiz transfer adedi" });
+    }
+
     await prisma.$transaction(async (tx) => {
-      await tx.adisyonKalem.update({
-        where: { id: kid },
-        data: { adisyon_id: hedefId },
-      });
+      if (adetTransfer >= kalem.adet) {
+        await tx.adisyonKalem.update({
+          where: { id: kid },
+          data: { adisyon_id: hedefId },
+        });
+      } else {
+        const kalan = kalem.adet - adetTransfer;
+        const birim = kalem.birim_fiyat;
+        const toplamKaynak = kalem.iade || kalem.ikram ? 0 : birim * kalan;
+        const toplamHedef = kalem.iade || kalem.ikram ? 0 : birim * adetTransfer;
+        await tx.adisyonKalem.update({
+          where: { id: kid },
+          data: {
+            adet: kalan,
+            toplam_fiyat: toplamKaynak,
+          },
+        });
+        await tx.adisyonKalem.create({
+          data: {
+            adisyon_id: hedefId,
+            urun_id: kalem.urun_id,
+            urun_adi: kalem.urun_adi,
+            birim_fiyat: birim,
+            adet: adetTransfer,
+            toplam_fiyat: toplamHedef,
+            ikram: kalem.ikram,
+            ikram_neden: kalem.ikram_neden,
+            iade: kalem.iade,
+            fiyat_degistirildi: kalem.fiyat_degistirildi,
+            orijinal_fiyat: kalem.orijinal_fiyat,
+            ekleyen_kullanici_id: req.user.id,
+          },
+        });
+      }
       await hesaplaAdisyonToplam(tx, id);
       await hesaplaAdisyonToplam(tx, hedefId);
     });
@@ -855,6 +896,88 @@ router.post("/:id/kalemler/:kid/iade", async (req, res, next) => {
             iade: true,
             fiyat_degistirildi: false,
             orijinal_fiyat: null,
+            ekleyen_kullanici_id: req.user.id,
+          },
+        });
+      }
+      await hesaplaAdisyonToplam(tx, id);
+    });
+
+    const detay = await getAdisyonDetay(id);
+    emitAdisyonEvent("adisyon:guncellendi", { adisyon: detay });
+    res.json({ adisyon: detay });
+  } catch (e) {
+    next(e);
+  }
+});
+
+/** İkram: satırda kalır, tutar 0, etiket ikram */
+router.post("/:id/kalemler/:kid/ikram", async (req, res, next) => {
+  try {
+    const id = parseId(req.params.id);
+    const kid = parseId(req.params.kid);
+    if (!id || !kid) return res.status(400).json({ error: "Geçersiz parametre" });
+    const parsed = ikramKalemSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: "Geçersiz istek" });
+    }
+    if (garsonMu(req.user.rol)) {
+      return res.status(403).json({ error: "İkram yetkiniz yok" });
+    }
+    const adetIkram = parsed.data.adet;
+
+    const kalem = await prisma.adisyonKalem.findFirst({
+      where: { id: kid, adisyon_id: id },
+    });
+    if (!kalem) return res.status(404).json({ error: "Kalem bulunamadı" });
+    if (kalem.iade) {
+      return res.status(400).json({ error: "İade satırına ikram uygulanamaz" });
+    }
+    if (kalem.ikram) {
+      return res.status(400).json({ error: "Bu satır zaten ikram olarak işaretli" });
+    }
+    if (adetIkram < 1 || adetIkram > kalem.adet) {
+      return res.status(400).json({ error: "Geçersiz ikram adedi" });
+    }
+
+    const adisyon = await prisma.adisyon.findUnique({ where: { id } });
+    if (!adisyon || adisyon.durum !== "ACIK") {
+      return res.status(409).json({ error: "Adisyon güncellenemez" });
+    }
+
+    await prisma.$transaction(async (tx) => {
+      if (adetIkram >= kalem.adet) {
+        await tx.adisyonKalem.update({
+          where: { id: kid },
+          data: {
+            ikram: true,
+            ikram_neden: "İkram",
+            toplam_fiyat: 0,
+          },
+        });
+      } else {
+        const kalan = kalem.adet - adetIkram;
+        const birim = kalem.birim_fiyat;
+        await tx.adisyonKalem.update({
+          where: { id: kid },
+          data: {
+            adet: kalan,
+            toplam_fiyat: birim * kalan,
+          },
+        });
+        await tx.adisyonKalem.create({
+          data: {
+            adisyon_id: id,
+            urun_id: kalem.urun_id,
+            urun_adi: kalem.urun_adi,
+            birim_fiyat: birim,
+            adet: adetIkram,
+            toplam_fiyat: 0,
+            ikram: true,
+            ikram_neden: "İkram",
+            iade: false,
+            fiyat_degistirildi: false,
+            orijinal_fiyat: birim,
             ekleyen_kullanici_id: req.user.id,
           },
         });

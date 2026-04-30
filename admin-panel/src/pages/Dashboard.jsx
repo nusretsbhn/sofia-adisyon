@@ -80,6 +80,12 @@ export default function Dashboard() {
             </p>
           </div>
           <div className="rounded-xl border border-slate-700 bg-slate-950 p-5">
+            <p className="text-sm text-slate-500">Bugün havale</p>
+            <p className="mt-2 font-mono text-xl text-slate-200">
+              {formatTry(b?.havale_kurus ?? 0)}
+            </p>
+          </div>
+          <div className="rounded-xl border border-slate-700 bg-slate-950 p-5">
             <p className="text-sm text-slate-500">Bugün cari (ödeme kayıtları)</p>
             <p className="mt-2 font-mono text-xl text-amber-400/90">
               {formatTry(b?.cari_kurus ?? 0)}

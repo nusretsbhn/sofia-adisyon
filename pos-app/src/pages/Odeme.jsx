@@ -17,7 +17,7 @@ export default function Odeme() {
   const [loading, setLoading] = useState(true);
   const [paying, setPaying] = useState(false);
   const [err, setErr] = useState("");
-  /** null | 'NAKIT' | 'KREDI_KARTI' | 'KARISIK' | 'CARI' */
+  /** null | 'NAKIT' | 'KREDI_KARTI' | 'HAVALE' | 'KARISIK' | 'CARI' */
   const [onayModal, setOnayModal] = useState(null);
   const [seciliKalemIds, setSeciliKalemIds] = useState([]);
 
@@ -76,7 +76,7 @@ export default function Odeme() {
     const m = onayModal;
     setOnayModal(null);
     if (!m) return;
-    if (m === "NAKIT" || m === "KREDI_KARTI") {
+    if (m === "NAKIT" || m === "KREDI_KARTI" || m === "HAVALE") {
       await odemeAl(m);
       return;
     }
@@ -217,6 +217,14 @@ export default function Odeme() {
               >
                 Kredi kartı
               </button>
+              <button
+                type="button"
+                disabled={paying || toplam === 0}
+                onClick={() => setOnayModal("HAVALE")}
+                className="min-h-[56px] rounded-xl bg-indigo-700/80 text-xl font-semibold text-white border border-indigo-500/40 disabled:opacity-50"
+              >
+                Havale
+              </button>
             </div>
           </div>
 
@@ -297,6 +305,7 @@ export default function Odeme() {
             <p className="mt-1 text-sm font-medium text-emerald-400/90">
               {onayModal === "NAKIT" && "Nakit ödeme"}
               {onayModal === "KREDI_KARTI" && "Kredi kartı ödemesi"}
+              {onayModal === "HAVALE" && "Havale ödemesi"}
               {onayModal === "KARISIK" && "Karışık ödeme (nakit + kart)"}
               {onayModal === "CARI" && "Cari hesaba işle"}
             </p>
