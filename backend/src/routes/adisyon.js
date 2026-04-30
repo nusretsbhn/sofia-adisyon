@@ -90,7 +90,7 @@ const odemeBodySchema = z.discriminatedUnion("odeme_turu", [
     odemeler: z
       .array(
         z.object({
-          odeme_turu: z.enum(["NAKIT", "KREDI_KARTI"]),
+          odeme_turu: z.enum(["NAKIT", "KREDI_KARTI", "HAVALE"]),
           tutar: z.number().int().min(0),
         }),
       )
@@ -735,22 +735,43 @@ router.post("/:id/kalemler", async (req, res, next) => {
     const toplam_fiyat = ikram ? 0 : birim_fiyat * adet;
 
     await prisma.$transaction(async (tx) => {
-      await tx.adisyonKalem.create({
-        data: {
+      // Aynı ürün + aynı fiyat tekrar eklendiğinde yeni satır açma, mevcut satırda biriktir.
+      const mevcutSatir = await tx.adisyonKalem.findFirst({
+        where: {
           adisyon_id: id,
           urun_id: urun.id,
-          urun_adi: urun.ad,
           birim_fiyat,
-          adet,
-          toplam_fiyat,
           ikram,
-          ikram_neden: ikram ? "İkram" : null,
-          fiyat_degistirildi: false,
-          orijinal_fiyat: birim_fiyat,
           iade: false,
-          ekleyen_kullanici_id: req.user.id,
+          fiyat_degistirildi: false,
         },
       });
+      if (mevcutSatir) {
+        await tx.adisyonKalem.update({
+          where: { id: mevcutSatir.id },
+          data: {
+            adet: mevcutSatir.adet + adet,
+            toplam_fiyat: (mevcutSatir.toplam_fiyat ?? 0) + toplam_fiyat,
+          },
+        });
+      } else {
+        await tx.adisyonKalem.create({
+          data: {
+            adisyon_id: id,
+            urun_id: urun.id,
+            urun_adi: urun.ad,
+            birim_fiyat,
+            adet,
+            toplam_fiyat,
+            ikram,
+            ikram_neden: ikram ? "İkram" : null,
+            fiyat_degistirildi: false,
+            orijinal_fiyat: birim_fiyat,
+            iade: false,
+            ekleyen_kullanici_id: req.user.id,
+          },
+        });
+      }
       await hesaplaAdisyonToplam(tx, id);
     });
 

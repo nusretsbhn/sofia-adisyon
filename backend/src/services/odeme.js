@@ -72,7 +72,11 @@ export async function tamamlaOdemeVeKapat(tx, { adisyonId, kullaniciId, odeme_tu
       }
       let sum = 0;
       for (const row of odemeler) {
-        if (row.odeme_turu !== "NAKIT" && row.odeme_turu !== "KREDI_KARTI") {
+        if (
+          row.odeme_turu !== "NAKIT" &&
+          row.odeme_turu !== "KREDI_KARTI" &&
+          row.odeme_turu !== "HAVALE"
+        ) {
           const err = new Error("KARISIK_TUR");
           err.code = "KARISIK_TUR";
           throw err;

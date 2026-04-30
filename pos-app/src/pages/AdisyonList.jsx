@@ -92,6 +92,7 @@ export default function AdisyonList() {
   const [odenenKalemler, setOdenenKalemler] = useState([]);
   const [nakitTry, setNakitTry] = useState("");
   const [kartTry, setKartTry] = useState("");
+  const [havaleTry, setHavaleTry] = useState("");
   const [cariId, setCariId] = useState("");
   const [cariler, setCariler] = useState([]);
   const [cariModal, setCariModal] = useState(false);
@@ -108,6 +109,7 @@ export default function AdisyonList() {
   const [kasaLoading, setKasaLoading] = useState(false);
   const [kasaErr, setKasaErr] = useState("");
   const [kasaCiro, setKasaCiro] = useState(null);
+  const [kasaPrinting, setKasaPrinting] = useState(false);
 
   const gunRef = useRef(
     `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}-${String(new Date().getDate()).padStart(2, "0")}`,
@@ -760,11 +762,12 @@ export default function AdisyonList() {
     if (!aktifId || !detay) return;
     const n = tryToKurus(nakitTry);
     const k = tryToKurus(kartTry);
-    if (n == null || k == null) {
-      setOdemeErr("Nakit ve kart tutarlarını girin.");
+    const h = tryToKurus(havaleTry);
+    if (n == null || k == null || h == null) {
+      setOdemeErr("Nakit, kart ve havale tutarlarını girin.");
       return;
     }
-    if (n + k !== detay.toplam_tutar) {
+    if (n + k + h !== detay.toplam_tutar) {
       setOdemeErr(`Toplam ${formatTry(detay.toplam_tutar)} olmalı.`);
       return;
     }
@@ -776,6 +779,7 @@ export default function AdisyonList() {
         odemeler: [
           { odeme_turu: "NAKIT", tutar: n },
           { odeme_turu: "KREDI_KARTI", tutar: k },
+          { odeme_turu: "HAVALE", tutar: h },
         ],
       });
       setOdemeModal(false);
@@ -794,11 +798,12 @@ export default function AdisyonList() {
     if (!aktifId || !detay) return;
     const n = tryToKurus(nakitTry);
     const k = tryToKurus(kartTry);
-    if (n == null || k == null) {
-      setOdemeErr("Nakit ve kart tutarlarını girin.");
+    const h = tryToKurus(havaleTry);
+    if (n == null || k == null || h == null) {
+      setOdemeErr("Nakit, kart ve havale tutarlarını girin.");
       return;
     }
-    if (n + k !== detay.toplam_tutar) {
+    if (n + k + h !== detay.toplam_tutar) {
       setOdemeErr(`Toplam ${formatTry(detay.toplam_tutar)} olmalı.`);
       return;
     }
@@ -880,11 +885,12 @@ export default function AdisyonList() {
     }
     const n = tryToKurus(nakitTry);
     const k = tryToKurus(kartTry);
-    if (n == null || k == null) {
-      setOdemeErr("Nakit ve kart girin.");
+    const h = tryToKurus(havaleTry);
+    if (n == null || k == null || h == null) {
+      setOdemeErr("Nakit, kart ve havale girin.");
       return;
     }
-    if (n + k !== ara) {
+    if (n + k + h !== ara) {
       setOdemeErr(`Seçilen ara toplam ${formatTry(ara)} olmalı.`);
       return;
     }
@@ -914,6 +920,7 @@ export default function AdisyonList() {
         odemeler: [
           { odeme_turu: "NAKIT", tutar: n },
           { odeme_turu: "KREDI_KARTI", tutar: k },
+          { odeme_turu: "HAVALE", tutar: h },
         ],
       });
       setOdenenKalemler((prev) => [...prev, ...odenenParcaSatirlari()]);
@@ -938,11 +945,12 @@ export default function AdisyonList() {
     }
     const n = tryToKurus(nakitTry);
     const k = tryToKurus(kartTry);
-    if (n == null || k == null) {
-      setOdemeErr("Nakit ve kart girin.");
+    const h = tryToKurus(havaleTry);
+    if (n == null || k == null || h == null) {
+      setOdemeErr("Nakit, kart ve havale girin.");
       return;
     }
-    if (n + k !== ara) {
+    if (n + k + h !== ara) {
       setOdemeErr(`Seçilen ara toplam ${formatTry(ara)} olmalı.`);
       return;
     }
@@ -1036,6 +1044,52 @@ export default function AdisyonList() {
       setKasaCiro(null);
     } finally {
       setKasaLoading(false);
+    }
+  }
+
+  function kasaOzetMetniOlustur() {
+    const ayir = "-".repeat(32);
+    const ts = new Date().toLocaleString("tr-TR");
+    return [
+      "TURADISYON",
+      "KASA OZETI",
+      ayir,
+      `Tarih: ${ts}`,
+      ayir,
+      `Gunluk ciro : ${formatTry(kasaCiro?.ciro_kurus ?? 0)}`,
+      `Nakit      : ${formatTry(kasaCiro?.odeme_kurus?.nakit ?? 0)}`,
+      `Kredi karti: ${formatTry(kasaCiro?.odeme_kurus?.kredi_karti ?? 0)}`,
+      `Havale     : ${formatTry(kasaCiro?.odeme_kurus?.havale ?? 0)}`,
+      ayir,
+      `Toplam adisyon: ${toplamAdisyonSayisi}`,
+      `Acik adisyon : ${acikAdisyonSayisi}`,
+      `Kapali adisyon: ${kapaliAdisyonSayisi}`,
+      ayir,
+      "",
+    ].join("\n");
+  }
+
+  async function kasaOzetYazdir() {
+    if (kasaLoading) {
+      setToast("Kasa özeti yükleniyor.");
+      return;
+    }
+    if (!window.turadisyon?.printReceipt) {
+      setToast("Yazdırma bu cihazda desteklenmiyor.");
+      return;
+    }
+    setKasaPrinting(true);
+    try {
+      const printerName = localStorage.getItem("turadisyon_printer_name") || "kasa";
+      const r = await window.turadisyon.printReceipt({
+        printerName,
+        text: kasaOzetMetniOlustur(),
+      });
+      setToast(r?.ok ? "Kasa özeti yazdırıldı." : r?.error || "Kasa özeti yazdırılamadı.");
+    } catch (e) {
+      setToast(e?.message || "Kasa özeti yazdırılamadı.");
+    } finally {
+      setKasaPrinting(false);
     }
   }
 
@@ -1332,6 +1386,7 @@ export default function AdisyonList() {
               setSeciliBolAdet({});
               setNakitTry("");
               setKartTry("");
+              setHavaleTry("");
               cariYukle();
               setOdemeModal(true);
             }}
@@ -1727,8 +1782,8 @@ export default function AdisyonList() {
               </div>
 
               <div className="mt-5 border-t border-pos-border pt-4">
-                <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">Karışık (nakit + kart = toplam)</p>
-                <div className="grid grid-cols-2 gap-2 mt-2">
+                <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">Karışık (nakit + kart + havale = toplam)</p>
+                <div className="grid grid-cols-1 gap-2 mt-2">
                   <input
                     placeholder="Nakit"
                     className="min-h-[44px] rounded-lg border border-pos-border bg-pos-bg px-2 text-slate-100"
@@ -1740,6 +1795,12 @@ export default function AdisyonList() {
                     className="min-h-[44px] rounded-lg border border-pos-border bg-pos-bg px-2 text-slate-100"
                     value={kartTry}
                     onChange={(e) => setKartTry(e.target.value)}
+                  />
+                  <input
+                    placeholder="Havale"
+                    className="min-h-[44px] rounded-lg border border-pos-border bg-pos-bg px-2 text-slate-100"
+                    value={havaleTry}
+                    onChange={(e) => setHavaleTry(e.target.value)}
                   />
                 </div>
                 <button
@@ -1828,10 +1889,10 @@ export default function AdisyonList() {
             <p className="mt-1 text-sm font-medium text-emerald-400/90">
               {odemeOnay.type === "tam" &&
                 `${odemeTurEtiketi(odemeOnay.tur)} ödemesi`}
-              {odemeOnay.type === "karisik-tam" && "Karışık ödeme (nakit + kart)"}
+              {odemeOnay.type === "karisik-tam" && "Karışık ödeme (nakit + kart + havale)"}
               {odemeOnay.type === "sec" &&
                 `Seçilen satırlar → ${odemeTurEtiketi(odemeOnay.tur)}`}
-              {odemeOnay.type === "sec-karisik" && "Seçilen satırlar → Karışık ödeme"}
+              {odemeOnay.type === "sec-karisik" && "Seçilen satırlar → Karışık ödeme (nakit + kart + havale)"}
               {odemeOnay.type === "cari" && "Cari hesaba işle"}
             </p>
             <p className="mt-4 text-slate-300 leading-relaxed text-sm">
@@ -1934,6 +1995,24 @@ export default function AdisyonList() {
                     <p className="text-xs text-slate-500">Kapalı adisyon</p>
                     <p className="mt-1 font-mono text-slate-200">{kapaliAdisyonSayisi}</p>
                   </div>
+                </div>
+                <div className="mt-4 flex gap-2">
+                  <button
+                    type="button"
+                    disabled={kasaPrinting || kasaLoading}
+                    className="flex-1 min-h-[44px] rounded-lg border border-pos-border text-slate-300 disabled:opacity-50"
+                    onClick={() => setKasaModal(false)}
+                  >
+                    Kapat
+                  </button>
+                  <button
+                    type="button"
+                    disabled={kasaPrinting || kasaLoading}
+                    className="flex-1 min-h-[44px] rounded-lg bg-emerald-700 text-white disabled:opacity-50"
+                    onClick={kasaOzetYazdir}
+                  >
+                    {kasaPrinting ? "Yazdırılıyor..." : "Yazdır"}
+                  </button>
                 </div>
               </>
             )}

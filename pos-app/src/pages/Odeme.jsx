@@ -14,6 +14,7 @@ export default function Odeme() {
   const [cariId, setCariId] = useState("");
   const [nakitTry, setNakitTry] = useState("");
   const [kartTry, setKartTry] = useState("");
+  const [havaleTry, setHavaleTry] = useState("");
   const [loading, setLoading] = useState(true);
   const [paying, setPaying] = useState(false);
   const [err, setErr] = useState("");
@@ -83,11 +84,13 @@ export default function Odeme() {
     if (m === "KARISIK") {
       const n = tryToKurus(nakitTry);
       const k = tryToKurus(kartTry);
-      if (n == null || k == null || !adisyon) return;
+      const h = tryToKurus(havaleTry);
+      if (n == null || k == null || h == null || !adisyon) return;
       await odemeAl("KARISIK", {
         odemeler: [
           { odeme_turu: "NAKIT", tutar: n },
           { odeme_turu: "KREDI_KARTI", tutar: k },
+          { odeme_turu: "HAVALE", tutar: h },
         ],
       });
       return;
@@ -115,14 +118,15 @@ export default function Odeme() {
   function odemeKarisikIste() {
     const n = tryToKurus(nakitTry);
     const k = tryToKurus(kartTry);
-    if (n == null || k == null) {
-      setErr("Nakit ve kart tutarlarını girin (örn. 10,50)");
+    const h = tryToKurus(havaleTry);
+    if (n == null || k == null || h == null) {
+      setErr("Nakit, kart ve havale tutarlarını girin (örn. 10,50)");
       return;
     }
     if (!adisyon) return;
-    if (n + k !== adisyon.toplam_tutar) {
+    if (n + k + h !== adisyon.toplam_tutar) {
       setErr(
-        `Toplam ${formatTry(adisyon.toplam_tutar)} olmalı (şu an ${formatTry(n + k)})`,
+        `Toplam ${formatTry(adisyon.toplam_tutar)} olmalı (şu an ${formatTry(n + k + h)})`,
       );
       return;
     }
@@ -254,8 +258,8 @@ export default function Odeme() {
           </div>
 
           <div className="border-t border-pos-border pt-6">
-            <p className="text-xs text-slate-500 mb-2">Karışık (nakit + kart = toplam)</p>
-            <div className="grid grid-cols-2 gap-3 mb-3">
+            <p className="text-xs text-slate-500 mb-2">Karışık (nakit + kart + havale = toplam)</p>
+            <div className="grid grid-cols-1 gap-3 mb-3">
               <div>
                 <label className="text-xs text-slate-600">Nakit (₺)</label>
                 <input
@@ -271,6 +275,15 @@ export default function Odeme() {
                   className="mt-1 w-full min-h-[48px] rounded-lg border border-pos-border bg-pos-bg px-3 text-slate-100"
                   value={kartTry}
                   onChange={(e) => setKartTry(e.target.value)}
+                  placeholder="0"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-slate-600">Havale (₺)</label>
+                <input
+                  className="mt-1 w-full min-h-[48px] rounded-lg border border-pos-border bg-pos-bg px-3 text-slate-100"
+                  value={havaleTry}
+                  onChange={(e) => setHavaleTry(e.target.value)}
                   placeholder="0"
                 />
               </div>
@@ -306,7 +319,7 @@ export default function Odeme() {
               {onayModal === "NAKIT" && "Nakit ödeme"}
               {onayModal === "KREDI_KARTI" && "Kredi kartı ödemesi"}
               {onayModal === "HAVALE" && "Havale ödemesi"}
-              {onayModal === "KARISIK" && "Karışık ödeme (nakit + kart)"}
+              {onayModal === "KARISIK" && "Karışık ödeme (nakit + kart + havale)"}
               {onayModal === "CARI" && "Cari hesaba işle"}
             </p>
             <p className="mt-4 text-slate-300 leading-relaxed text-sm">
