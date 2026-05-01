@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { Routes, Route, Link, Navigate, useLocation } from "react-router-dom";
 import Dashboard from "./pages/Dashboard.jsx";
 import Login from "./pages/Login.jsx";
@@ -72,6 +73,12 @@ function BlockPersonel({ children }) {
 function Layout({ children }) {
   const storedUser = getStoredUser();
   const isPersonel = storedUser?.rol === "PERSONEL";
+  const location = useLocation();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  useEffect(() => {
+    setMobileMenuOpen(false);
+  }, [location.pathname]);
 
   function logout() {
     localStorage.removeItem("turadisyon_token");
@@ -80,8 +87,22 @@ function Layout({ children }) {
   }
 
   return (
-    <div className="min-h-screen flex">
-      <aside className="w-56 shrink-0 border-r border-slate-700 bg-slate-950 p-4">
+    <div className="min-h-screen flex relative">
+      {mobileMenuOpen && (
+        <button
+          type="button"
+          className="fixed inset-0 z-30 bg-slate-950/70 md:hidden"
+          aria-label="Menüyü kapat"
+          onClick={() => setMobileMenuOpen(false)}
+        />
+      )}
+
+      <aside
+        className={[
+          "fixed inset-y-0 left-0 z-40 w-56 shrink-0 border-r border-slate-700 bg-slate-950 p-4 transition-transform duration-200 md:static md:translate-x-0",
+          mobileMenuOpen ? "translate-x-0" : "-translate-x-full",
+        ].join(" ")}
+      >
         <div className="text-lg font-bold text-blue-400 mb-6">TurAdisyon</div>
         <nav className="flex flex-col gap-2 text-sm">
           {!isPersonel && (
@@ -144,7 +165,19 @@ function Layout({ children }) {
           Çıkış
         </button>
       </aside>
-      <main className="flex-1 overflow-auto">{children}</main>
+      <main className="flex-1 overflow-auto min-w-0">
+        <div className="md:hidden sticky top-0 z-20 border-b border-slate-800 bg-slate-900/95 backdrop-blur px-3 py-2">
+          <button
+            type="button"
+            onClick={() => setMobileMenuOpen((v) => !v)}
+            className="inline-flex items-center justify-center rounded-md border border-slate-700 px-3 py-1.5 text-sm text-slate-200 hover:bg-slate-800"
+            aria-label="Menüyü aç/kapat"
+          >
+            ☰ Menü
+          </button>
+        </div>
+        {children}
+      </main>
     </div>
   );
 }

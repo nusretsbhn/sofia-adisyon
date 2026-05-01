@@ -212,13 +212,48 @@ router.get("/", async (req, res, next) => {
 /** POS için kasa özeti (rol bağımsız, giriş yapan kullanıcıya açık). */
 router.get("/kasa-ozet", async (req, res, next) => {
   try {
-    const bas = parseDateOnly(req.query.baslangic);
-    const bit = parseDateOnly(req.query.bitis);
-    if ((req.query.baslangic && !bas) || (req.query.bitis && !bit)) {
-      return res.status(400).json({ error: "Geçersiz tarih (YYYY-MM-DD)" });
+    const fromTsRaw = String(req.query.from_ts || "").trim();
+    const toTsRaw = String(req.query.to_ts || "").trim();
+    let start = null;
+    let end = null;
+
+    if (fromTsRaw || toTsRaw) {
+      const f = fromTsRaw ? new Date(fromTsRaw) : null;
+      const t = toTsRaw ? new Date(toTsRaw) : null;
+      if ((fromTsRaw && Number.isNaN(f?.getTime?.())) || (toTsRaw && Number.isNaN(t?.getTime?.()))) {
+        return res.status(400).json({ error: "Geçersiz zaman aralığı" });
+      }
+      if (f && t) {
+        start = f;
+        end = t;
+      } else {
+        const now = new Date();
+        const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+        const dayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+        start = f ?? dayStart;
+        end = t ?? dayEnd;
+      }
+    } else {
+      const bas = parseDateOnly(req.query.baslangic);
+      const bit = parseDateOnly(req.query.bitis);
+      if ((req.query.baslangic && !bas) || (req.query.bitis && !bit)) {
+        return res.status(400).json({ error: "Geçersiz tarih (YYYY-MM-DD)" });
+      }
+      start = bas ?? parseDateOnly(new Date().toISOString().slice(0, 10));
+      end = endOfDayUtc(bit ?? start);
     }
-    const start = bas ?? parseDateOnly(new Date().toISOString().slice(0, 10));
-    const end = endOfDayUtc(bit ?? start);
+
+    const startMs = start.getTime();
+    const endMs = end.getTime();
+    const toMs = (v) => {
+      if (v == null) return NaN;
+      if (v instanceof Date) return v.getTime();
+      if (typeof v === "number") return v;
+      const n = Number(v);
+      if (Number.isFinite(n)) return n;
+      const d = new Date(v);
+      return d.getTime();
+    };
 
     const kapali = await prisma.adisyon.findMany({
       where: {
@@ -230,8 +265,7 @@ router.get("/kasa-ozet", async (req, res, next) => {
     });
 
     const odemeler = await prisma.odeme.findMany({
-      where: { tarih: { gte: start, lte: end } },
-      select: { odeme_turu: true, tutar: true },
+      select: { odeme_turu: true, tutar: true, tarih: true },
     });
 
     const ciroToplam = kapali.reduce((s, a) => s + (a.toplam_tutar ?? 0), 0);
@@ -240,6 +274,8 @@ router.get("/kasa-ozet", async (req, res, next) => {
     let havale = 0;
     let cari = 0;
     for (const o of odemeler) {
+      const t = toMs(o.tarih);
+      if (!Number.isFinite(t) || t < startMs || t > endMs) continue;
       if (o.odeme_turu === "NAKIT") nakit += o.tutar;
       else if (o.odeme_turu === "KREDI_KARTI") kredi += o.tutar;
       else if (o.odeme_turu === "HAVALE") havale += o.tutar;
@@ -249,6 +285,8 @@ router.get("/kasa-ozet", async (req, res, next) => {
     res.json({
       baslangic: req.query.baslangic ?? null,
       bitis: req.query.bitis ?? null,
+      from_ts: fromTsRaw || null,
+      to_ts: toTsRaw || null,
       kapali_adisyon_sayisi: kapali.length,
       ciro_kurus: ciroToplam,
       odeme_kurus: { nakit, kredi_karti: kredi, havale, cari },

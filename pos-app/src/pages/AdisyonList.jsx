@@ -765,11 +765,18 @@ export default function AdisyonList() {
 
   async function karisikTamOdemeDirect() {
     if (!aktifId || !detay) return;
-    const n = tryToKurus(nakitTry);
-    const k = tryToKurus(kartTry);
-    const h = tryToKurus(havaleTry);
-    if (n == null || k == null || h == null) {
-      setOdemeErr("Nakit, kart ve havale tutarlarını girin.");
+    const nRaw = String(nakitTry ?? "").trim();
+    const kRaw = String(kartTry ?? "").trim();
+    const hRaw = String(havaleTry ?? "").trim();
+    const n = nRaw ? tryToKurus(nRaw) : 0;
+    const k = kRaw ? tryToKurus(kRaw) : 0;
+    const h = hRaw ? tryToKurus(hRaw) : 0;
+    if ((nRaw && n == null) || (kRaw && k == null) || (hRaw && h == null)) {
+      setOdemeErr("Geçerli bir tutar girin.");
+      return;
+    }
+    if (n + k + h <= 0) {
+      setOdemeErr("En az bir ödeme yöntemine tutar girin.");
       return;
     }
     if (n + k + h !== detay.toplam_tutar) {
@@ -801,11 +808,18 @@ export default function AdisyonList() {
 
   function karisikTamOdemeIste() {
     if (!aktifId || !detay) return;
-    const n = tryToKurus(nakitTry);
-    const k = tryToKurus(kartTry);
-    const h = tryToKurus(havaleTry);
-    if (n == null || k == null || h == null) {
-      setOdemeErr("Nakit, kart ve havale tutarlarını girin.");
+    const nRaw = String(nakitTry ?? "").trim();
+    const kRaw = String(kartTry ?? "").trim();
+    const hRaw = String(havaleTry ?? "").trim();
+    const n = nRaw ? tryToKurus(nRaw) : 0;
+    const k = kRaw ? tryToKurus(kRaw) : 0;
+    const h = hRaw ? tryToKurus(hRaw) : 0;
+    if ((nRaw && n == null) || (kRaw && k == null) || (hRaw && h == null)) {
+      setOdemeErr("Geçerli bir tutar girin.");
+      return;
+    }
+    if (n + k + h <= 0) {
+      setOdemeErr("En az bir ödeme yöntemine tutar girin.");
       return;
     }
     if (n + k + h !== detay.toplam_tutar) {
@@ -888,11 +902,18 @@ export default function AdisyonList() {
       setOdemeErr("Satır seçin.");
       return;
     }
-    const n = tryToKurus(nakitTry);
-    const k = tryToKurus(kartTry);
-    const h = tryToKurus(havaleTry);
-    if (n == null || k == null || h == null) {
-      setOdemeErr("Nakit, kart ve havale girin.");
+    const nRaw = String(nakitTry ?? "").trim();
+    const kRaw = String(kartTry ?? "").trim();
+    const hRaw = String(havaleTry ?? "").trim();
+    const n = nRaw ? tryToKurus(nRaw) : 0;
+    const k = kRaw ? tryToKurus(kRaw) : 0;
+    const h = hRaw ? tryToKurus(hRaw) : 0;
+    if ((nRaw && n == null) || (kRaw && k == null) || (hRaw && h == null)) {
+      setOdemeErr("Geçerli bir tutar girin.");
+      return;
+    }
+    if (n + k + h <= 0) {
+      setOdemeErr("En az bir ödeme yöntemine tutar girin.");
       return;
     }
     if (n + k + h !== ara) {
@@ -948,11 +969,18 @@ export default function AdisyonList() {
       setOdemeErr("Satır seçin.");
       return;
     }
-    const n = tryToKurus(nakitTry);
-    const k = tryToKurus(kartTry);
-    const h = tryToKurus(havaleTry);
-    if (n == null || k == null || h == null) {
-      setOdemeErr("Nakit, kart ve havale girin.");
+    const nRaw = String(nakitTry ?? "").trim();
+    const kRaw = String(kartTry ?? "").trim();
+    const hRaw = String(havaleTry ?? "").trim();
+    const n = nRaw ? tryToKurus(nRaw) : 0;
+    const k = kRaw ? tryToKurus(kRaw) : 0;
+    const h = hRaw ? tryToKurus(hRaw) : 0;
+    if ((nRaw && n == null) || (kRaw && k == null) || (hRaw && h == null)) {
+      setOdemeErr("Geçerli bir tutar girin.");
+      return;
+    }
+    if (n + k + h <= 0) {
+      setOdemeErr("En az bir ödeme yöntemine tutar girin.");
       return;
     }
     if (n + k + h !== ara) {
@@ -1046,9 +1074,11 @@ export default function AdisyonList() {
     setKasaLoading(true);
     setKasaErr("");
     try {
-      const bugun = ymdLocal(new Date());
       const { data } = await api.get("/api/adisyonlar/kasa-ozet", {
-        params: { baslangic: bugun, bitis: bugun },
+        params: {
+          from_ts: startOfLocalDay().toISOString(),
+          to_ts: endOfLocalDay().toISOString(),
+        },
       });
       setKasaCiro(data);
     } catch {

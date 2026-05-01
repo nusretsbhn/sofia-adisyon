@@ -82,10 +82,13 @@ export default function Odeme() {
       return;
     }
     if (m === "KARISIK") {
-      const n = tryToKurus(nakitTry);
-      const k = tryToKurus(kartTry);
-      const h = tryToKurus(havaleTry);
-      if (n == null || k == null || h == null || !adisyon) return;
+      const nRaw = String(nakitTry ?? "").trim();
+      const kRaw = String(kartTry ?? "").trim();
+      const hRaw = String(havaleTry ?? "").trim();
+      const n = nRaw ? tryToKurus(nRaw) : 0;
+      const k = kRaw ? tryToKurus(kRaw) : 0;
+      const h = hRaw ? tryToKurus(hRaw) : 0;
+      if ((nRaw && n == null) || (kRaw && k == null) || (hRaw && h == null) || !adisyon) return;
       await odemeAl("KARISIK", {
         odemeler: [
           { odeme_turu: "NAKIT", tutar: n },
@@ -116,11 +119,18 @@ export default function Odeme() {
   }
 
   function odemeKarisikIste() {
-    const n = tryToKurus(nakitTry);
-    const k = tryToKurus(kartTry);
-    const h = tryToKurus(havaleTry);
-    if (n == null || k == null || h == null) {
-      setErr("Nakit, kart ve havale tutarlarını girin (örn. 10,50)");
+    const nRaw = String(nakitTry ?? "").trim();
+    const kRaw = String(kartTry ?? "").trim();
+    const hRaw = String(havaleTry ?? "").trim();
+    const n = nRaw ? tryToKurus(nRaw) : 0;
+    const k = kRaw ? tryToKurus(kRaw) : 0;
+    const h = hRaw ? tryToKurus(hRaw) : 0;
+    if ((nRaw && n == null) || (kRaw && k == null) || (hRaw && h == null)) {
+      setErr("Geçerli bir tutar girin (örn. 10,50).");
+      return;
+    }
+    if (n + k + h <= 0) {
+      setErr("En az bir ödeme yöntemine tutar girin.");
       return;
     }
     if (!adisyon) return;
