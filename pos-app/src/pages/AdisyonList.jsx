@@ -1058,14 +1058,16 @@ export default function AdisyonList() {
     return tur ?? "";
   }
   const aktifAcik = detay?.durum === "ACIK";
+  /** Cariye işlenen kapanışlar günün cirosuna (ve kasa toplamlarına) dahil edilmez */
+  const kapaliCiroDahil = (a) => a.durum === "KAPALI" && a.odeme_turu !== "CARI";
   const acikAdisyonSayisi = listMasa.filter((a) => a.durum === "ACIK").length;
-  const kapaliAdisyonSayisi = listMasa.filter((a) => a.durum === "KAPALI").length;
+  const kapaliAdisyonSayisi = listMasa.filter(kapaliCiroDahil).length;
   const toplamAdisyonSayisi = acikAdisyonSayisi + kapaliAdisyonSayisi;
   const acikToplamTutar = listMasa
     .filter((a) => a.durum === "ACIK")
     .reduce((s, a) => s + (a.toplam_tutar ?? 0), 0);
   const kapaliToplamTutar = listMasa
-    .filter((a) => a.durum === "KAPALI")
+    .filter(kapaliCiroDahil)
     .reduce((s, a) => s + (a.toplam_tutar ?? 0), 0);
   const canliToplamCiro = acikToplamTutar + kapaliToplamTutar;
 
