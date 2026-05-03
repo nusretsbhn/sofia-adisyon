@@ -9,6 +9,14 @@ function nextKey() {
   return tempKey;
 }
 
+/** POS sipariş ekranında gösterilmeyecek kategori adları (admin’de durur). */
+function kategoriPosVitrin(c) {
+  const ad = String(c?.ad ?? "")
+    .trim()
+    .toLowerCase();
+  return ad !== "hammaddeler";
+}
+
 /** Boş veya geçersizse 1; önce rakam (örn. 3) sonra ürün = 3 adet */
 function adetFromBuffer(buf) {
   const s = String(buf ?? "").trim();
@@ -50,7 +58,7 @@ export default function SiparisEkrani() {
       }
       setAdisyon(a);
       const cats = kRes.data.kategoriler ?? [];
-      setKategoriler(cats.filter((c) => c.aktif));
+      setKategoriler(cats.filter((c) => c.aktif && kategoriPosVitrin(c)));
       setUrunler(uRes.data.urunler ?? []);
     } catch {
       setErr("Yüklenemedi");
@@ -76,6 +84,13 @@ export default function SiparisEkrani() {
     if (katId == null && kategoriler.length) {
       const first = kategoriler.find((c) => c.aktif);
       if (first) setKatId(first.id);
+    }
+  }, [kategoriler, katId]);
+
+  /** Hammaddeler filtrelendiyse veya liste değiştiyse geçersiz seçimi sıfırla */
+  useEffect(() => {
+    if (katId != null && !kategoriler.some((c) => c.id === katId)) {
+      setKatId(null);
     }
   }, [kategoriler, katId]);
 
@@ -343,13 +358,13 @@ export default function SiparisEkrani() {
             onChange={(e) => setSearch(e.target.value)}
           />
           {!search.trim() && (
-            <div className="flex gap-2 overflow-x-auto p-3 bg-slate-950/50">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 p-3 bg-slate-950/50">
               {kategoriler.map((k) => (
                 <button
                   key={k.id}
                   type="button"
                   onClick={() => setKatId(k.id)}
-                  className={`shrink-0 min-h-[44px] rounded-lg px-4 py-2 text-sm font-medium ${
+                  className={`min-h-[44px] min-w-0 rounded-lg px-3 py-2 text-sm font-medium text-center truncate ${
                     katId === k.id
                       ? "bg-pos-primary text-white"
                       : "bg-pos-card text-slate-300 border border-pos-border"
@@ -363,16 +378,20 @@ export default function SiparisEkrani() {
               ))}
             </div>
           )}
-          <div className="flex-1 overflow-y-auto p-3 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 content-start">
+          <div className="flex-1 overflow-y-auto p-2 sm:p-3 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-1.5 sm:gap-2 content-start">
             {filtreUrun.map((u) => (
               <button
                 key={u.id}
                 type="button"
                 onClick={() => urunTasla(u)}
-                className="flex flex-col items-stretch justify-between rounded-xl border border-pos-border bg-pos-card p-3 min-h-[88px] text-left active:scale-[0.98]"
+                className="flex flex-col items-stretch justify-between rounded-lg border border-pos-border bg-pos-card p-2 sm:p-2.5 min-h-[64px] sm:min-h-[72px] text-left active:scale-[0.98]"
               >
-                <span className="text-slate-100 font-medium leading-tight">{u.ad}</span>
-                <span className="mt-2 font-mono text-blue-300">{formatTry(u.fiyat)}</span>
+                <span className="text-slate-100 text-xs sm:text-sm font-medium leading-snug line-clamp-2">
+                  {u.ad}
+                </span>
+                <span className="mt-1 sm:mt-1.5 font-mono text-[11px] sm:text-xs text-blue-300 tabular-nums">
+                  {formatTry(u.fiyat)}
+                </span>
               </button>
             ))}
           </div>
