@@ -4,6 +4,7 @@ import AdisyonList from "./pages/AdisyonList.jsx";
 import AdisyonDetay from "./pages/AdisyonDetay.jsx";
 import SiparisEkrani from "./pages/SiparisEkrani.jsx";
 import Odeme from "./pages/Odeme.jsx";
+import { CatalogSocketBridge } from "./components/CatalogSocketBridge.jsx";
 
 function RequireAuth({ children }) {
   const loc = useLocation();
@@ -11,7 +12,12 @@ function RequireAuth({ children }) {
   if (!token) {
     return <Navigate to="/login" state={{ from: loc }} replace />;
   }
-  return children;
+  return (
+    <>
+      <CatalogSocketBridge />
+      {children}
+    </>
+  );
 }
 
 export default function App() {

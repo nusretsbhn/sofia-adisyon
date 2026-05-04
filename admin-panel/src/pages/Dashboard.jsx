@@ -6,6 +6,8 @@ export default function Dashboard() {
   const [data, setData] = useState(null);
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(true);
+  const [pubMsg, setPubMsg] = useState("");
+  const [pubBusy, setPubBusy] = useState(false);
 
   const load = useCallback(async () => {
     setErr("");
@@ -24,6 +26,21 @@ export default function Dashboard() {
     load();
   }, [load]);
 
+  async function posKatalogGonder() {
+    setPubMsg("");
+    setPubBusy(true);
+    try {
+      const { data: d } = await api.post("/api/sync/admin/publish-catalog");
+      setPubMsg(d.message || "Bağlı POS oturumlarına bildirildi.");
+    } catch (e) {
+      setPubMsg(
+        e?.response?.data?.error || e?.message || "Gönderilemedi.",
+      );
+    } finally {
+      setPubBusy(false);
+    }
+  }
+
   const b = data?.bugun;
   const a = data?.anlik;
   const tumCiro = data?.tum_zamanlar_ciro_kurus;
@@ -32,17 +49,30 @@ export default function Dashboard() {
     <div className="p-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <h1 className="text-2xl font-semibold text-slate-100">Dashboard</h1>
-        <button
-          type="button"
-          onClick={load}
-          className="rounded-lg border border-slate-600 px-4 py-2 text-sm text-slate-300 hover:bg-slate-800"
-        >
-          Yenile
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={posKatalogGonder}
+            disabled={pubBusy}
+            className="rounded-lg border border-emerald-700/60 bg-emerald-950/40 px-4 py-2 text-sm text-emerald-200 hover:bg-emerald-950/70 disabled:opacity-50"
+          >
+            {pubBusy ? "Gönderiliyor…" : "POS katalog güncelle"}
+          </button>
+          <button
+            type="button"
+            onClick={load}
+            className="rounded-lg border border-slate-600 px-4 py-2 text-sm text-slate-300 hover:bg-slate-800"
+          >
+            Yenile
+          </button>
+        </div>
       </div>
       <p className="mt-1 text-sm text-slate-500">
         Tarih: {data?.tarih ?? "—"} (yerel gün)
       </p>
+      {pubMsg && (
+        <p className="mt-2 text-sm text-slate-400">{pubMsg}</p>
+      )}
 
       {err && <p className="mt-4 text-sm text-amber-500">{err}</p>}
 

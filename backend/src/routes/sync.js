@@ -1,5 +1,7 @@
 import { Router } from "express";
 import { config } from "../config.js";
+import { requireAuth, loadUser, requireKasiyerUstu } from "../middleware/auth.js";
+import { getIo } from "../socket/events.js";
 import {
   applyMasterSnapshot,
   applyOpsSnapshot,
@@ -37,6 +39,39 @@ router.get("/status", (_req, res) => {
     enabled: config.sync.enabled,
     ...lastSync,
   });
+});
+
+/** Admin: bağlı tüm POS tarayıcılarına katalog yenile sinyali (Socket.IO). */
+router.post(
+  "/admin/publish-catalog",
+  requireAuth,
+  loadUser,
+  requireKasiyerUstu,
+  (_req, res) => {
+    const io = getIo();
+    const payload = { at: new Date().toISOString() };
+    io?.emit("catalog:refresh", payload);
+    res.json({
+      ok: true,
+      emitted: Boolean(io),
+      message:
+        "Bağlı POS oturumlarına bildirim gönderildi. Yerel senkron açıksa stok da çekilir.",
+    });
+  },
+);
+
+/**
+ * Yerel POS backend (SYNC_ROLE=local): uzaktan master snapshot çekip SQLite günceller.
+ * Uzak API kullanan POS’ta atlanır; yine de üstteki socket ile React tarafı yenilenir.
+ */
+router.post("/pull-master", requireAuth, loadUser, async (_req, res, next) => {
+  try {
+    const { pullMasterOnce } = await import("../sync/worker.js");
+    const r = await pullMasterOnce();
+    res.json(r);
+  } catch (e) {
+    next(e);
+  }
 });
 
 router.get("/master-snapshot", requireSyncKey, async (_req, res, next) => {

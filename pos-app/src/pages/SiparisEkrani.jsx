@@ -140,6 +140,14 @@ export default function SiparisEkrani() {
   }, [load]);
 
   useEffect(() => {
+    const fn = () => {
+      load();
+    };
+    window.addEventListener("turadisyon:catalog-refresh", fn);
+    return () => window.removeEventListener("turadisyon:catalog-refresh", fn);
+  }, [load]);
+
+  useEffect(() => {
     setKatId(null);
     setSearch("");
     setAdetGiris("");

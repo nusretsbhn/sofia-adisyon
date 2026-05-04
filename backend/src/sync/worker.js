@@ -45,6 +45,29 @@ async function pullMaster() {
   setSyncState({ lastMasterPullAt: new Date().toISOString(), lastError: null });
 }
 
+/** Manuel / POS tetiklemesi: yalnızca uzak master verisini yerel DB’ye çeker (ops push yapmaz). */
+export async function pullMasterOnce() {
+  if (!config.sync.enabled) {
+    return { ok: false, skipped: true, reason: "SYNC_ENABLED=false" };
+  }
+  if (config.sync.role !== "local") {
+    return {
+      ok: false,
+      skipped: true,
+      reason: "Sunucu yerel senkron modunda değil (SYNC_ROLE=local).",
+    };
+  }
+  if (!config.sync.remoteUrl || !config.sync.sharedKey) {
+    return {
+      ok: false,
+      skipped: true,
+      reason: "SYNC_REMOTE_URL veya SYNC_SHARED_KEY tanımlı değil.",
+    };
+  }
+  await pullMaster();
+  return { ok: true };
+}
+
 async function syncOnce() {
   await pushOps();
   await pullMaster();
