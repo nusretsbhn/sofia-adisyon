@@ -1,35 +1,11 @@
 import { useEffect, useState, useCallback } from "react";
 import api from "../api/client.js";
+import { escapeHtml, openFisWindow } from "../lib/printFis.js";
 
 function tryToKurus(s) {
   const n = parseFloat(String(s).replace(",", "."));
   if (!Number.isFinite(n) || n < 0) return null;
   return Math.round(n * 100);
-}
-
-function printFisMetni(baslik, satirlar) {
-  const html = `<!doctype html>
-<html>
-  <head>
-    <meta charset="utf-8" />
-    <title>${baslik}</title>
-    <style>
-      @page { size: 80mm auto; margin: 0; }
-      body { font-family: Consolas, "Courier New", monospace; font-size: 12px; margin: 0; padding: 8px 8px 24px 8px; }
-      pre { white-space: pre-wrap; margin: 0; }
-    </style>
-  </head>
-  <body>
-    <pre>${satirlar.join("\n")}</pre>
-    <script>window.onload = () => { window.print(); setTimeout(() => window.close(), 300); };</script>
-  </body>
-</html>`;
-  const w = window.open("", "_blank", "width=420,height=720");
-  if (!w) return false;
-  w.document.open();
-  w.document.write(html);
-  w.document.close();
-  return true;
 }
 
 export default function Envanter() {
@@ -109,34 +85,33 @@ export default function Envanter() {
   }
 
   function envanterFisYazdir() {
-    const ayir = "-".repeat(32);
-    const dusukler = satirlar.filter((s) => s.dusuk).length;
-    const aktifSayisi = satirlar.filter((s) => s.aktif).length;
-    const satirlarText = [
-      "TURADISYON",
-      "ENVANTER OZETI",
-      ayir,
-      `Tarih: ${new Date().toLocaleString("tr-TR")}`,
-      `Toplam urun: ${satirlar.length}`,
-      `Aktif urun : ${aktifSayisi}`,
-      `Dusuk stok : ${dusukler}`,
-      ayir,
-      "URUNLER",
-      ...satirlar.map((s) => {
-        const birim = s.stok_birim || "";
-        return `${String(s.urun_adi || "").slice(0, 18)}  M:${s.mevcut}${birim ? ` ${birim}` : ""} Min:${s.min_stok}`;
-      }),
-      ayir,
-      "SON GIRISLER",
-      ...(girisler.length
-        ? girisler.map((g) => {
-            const t = g.tarih ? new Date(g.tarih).toLocaleString("tr-TR") : "-";
-            return `${t} | ${g.urun_adi} | +${g.miktar}`;
-          })
-        : ["-"]),
-      "",
-    ];
-    const ok = printFisMetni("Envanter Fis", satirlarText);
+    const ts = new Date().toLocaleString("tr-TR");
+    const rows =
+      satirlar.length === 0
+        ? `<tr><td colspan="2" class="muted">Stok takibi açık ürün yok</td></tr>`
+        : satirlar
+            .map((s) => {
+              const ad = escapeHtml(s.urun_adi || "—");
+              const birim = s.stok_birim ? ` ${escapeHtml(s.stok_birim)}` : "";
+              const miktar = escapeHtml(String(s.mevcut ?? 0)) + birim;
+              return `<tr><td>${ad}</td><td class="num">${miktar}</td></tr>`;
+            })
+            .join("");
+    const body = `
+      <div class="brand">TURADISYON</div>
+      <div class="title">Envanter — mevcut stok</div>
+      <div class="meta">Yazdırma: ${escapeHtml(ts)}</div>
+      <table>
+        <thead>
+          <tr>
+            <th>Hammadde adı</th>
+            <th class="num">Mevcut</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    `;
+    const ok = openFisWindow("Envanter fişi", body);
     if (!ok) setMsg("Yazdırma penceresi engellendi.");
   }
 

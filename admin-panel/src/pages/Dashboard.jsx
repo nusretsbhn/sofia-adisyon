@@ -26,6 +26,7 @@ export default function Dashboard() {
 
   const b = data?.bugun;
   const a = data?.anlik;
+  const tumCiro = data?.tum_zamanlar_ciro_kurus;
 
   return (
     <div className="p-6">
@@ -48,7 +49,17 @@ export default function Dashboard() {
       {loading ? (
         <p className="mt-8 text-slate-500">Yükleniyor…</p>
       ) : (
-        <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="mt-8 space-y-4">
+          <div className="rounded-xl border border-emerald-900/50 bg-slate-950 p-6 shadow-lg shadow-emerald-950/20">
+            <p className="text-sm text-slate-500">Tüm zamanlar toplam ciro</p>
+            <p className="mt-2 font-mono text-3xl font-semibold text-emerald-400">
+              {formatTry(tumCiro ?? 0)}
+            </p>
+            <p className="mt-2 text-xs text-slate-600">
+              Kapalı (cari hariç) + şu an açık adisyon tutarları
+            </p>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <div className="rounded-xl border border-slate-700 bg-slate-950 p-5">
             <p className="text-sm text-slate-500">Bugün ciro (açık + kapalı)</p>
             <p className="mt-2 font-mono text-2xl text-emerald-400">
@@ -102,6 +113,7 @@ export default function Dashboard() {
             <p className="mt-2 font-mono text-xl text-amber-400/90">
               {formatTry(b?.cari_kurus ?? 0)}
             </p>
+          </div>
           </div>
         </div>
       )}

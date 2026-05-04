@@ -1,37 +1,13 @@
 import { useEffect, useState, useCallback } from "react";
 import api from "../api/client.js";
 import { formatTry } from "../lib/format.js";
+import { escapeHtml, openFisWindow } from "../lib/printFis.js";
 
 function yerelGun(d = new Date()) {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
-}
-
-function printFisMetni(baslik, satirlar) {
-  const html = `<!doctype html>
-<html>
-  <head>
-    <meta charset="utf-8" />
-    <title>${baslik}</title>
-    <style>
-      @page { size: 80mm auto; margin: 0; }
-      body { font-family: Consolas, "Courier New", monospace; font-size: 12px; margin: 0; padding: 8px 8px 24px 8px; }
-      pre { white-space: pre-wrap; margin: 0; }
-    </style>
-  </head>
-  <body>
-    <pre>${satirlar.join("\n")}</pre>
-    <script>window.onload = () => { window.print(); setTimeout(() => window.close(), 300); };</script>
-  </body>
-</html>`;
-  const w = window.open("", "_blank", "width=420,height=760");
-  if (!w) return false;
-  w.document.open();
-  w.document.write(html);
-  w.document.close();
-  return true;
 }
 
 export default function Raporlar() {
@@ -48,6 +24,9 @@ export default function Raporlar() {
   const [adisyonDetayId, setAdisyonDetayId] = useState(null);
   const [adisyonDetay, setAdisyonDetay] = useState(null);
   const [adisyonDetayLoading, setAdisyonDetayLoading] = useState(false);
+  const [gunlukAcik, setGunlukAcik] = useState(false);
+  const [gunluk, setGunluk] = useState(null);
+  const [gunlukLoading, setGunlukLoading] = useState(false);
 
   const params = { baslangic, bitis };
 
@@ -79,6 +58,11 @@ export default function Raporlar() {
   useEffect(() => {
     yukle();
   }, [yukle]);
+
+  useEffect(() => {
+    setGunlukAcik(false);
+    setGunluk(null);
+  }, [baslangic, bitis]);
 
   useEffect(() => {
     if (!adisyonDetayId) {
@@ -144,69 +128,97 @@ export default function Raporlar() {
     }
   }
 
+  async function gunlukToggle() {
+    if (gunlukAcik) {
+      setGunlukAcik(false);
+      return;
+    }
+    setGunlukLoading(true);
+    setErr("");
+    try {
+      const { data } = await api.get("/api/raporlar/gunluk-ciro", { params });
+      setGunluk(data);
+      setGunlukAcik(true);
+    } catch {
+      setErr("Gün bazlı liste yüklenemedi.");
+    } finally {
+      setGunlukLoading(false);
+    }
+  }
+
   function raporFisYazdir() {
-    const ayir = "-".repeat(32);
-    const lines = [
-      "TURADISYON",
-      "RAPOR OZETI",
-      ayir,
-      `Aralik: ${baslangic} -> ${bitis}`,
-      `Tarih : ${new Date().toLocaleString("tr-TR")}`,
-      ayir,
-    ];
+    const ts = new Date().toLocaleString("tr-TR");
+    const parts = [];
+
+    parts.push(`
+      <div class="brand">TURADISYON</div>
+      <div class="title">Rapor özeti</div>
+      <div class="meta">
+        Aralık: ${escapeHtml(baslangic)} → ${escapeHtml(bitis)} · Yazdırma: ${escapeHtml(ts)}
+      </div>
+    `);
 
     if (ciro) {
-      lines.push(
-        "CIRO",
-        `Ciro     : ${formatTry(ciro.ciro_kurus)}`,
-        `Kapali   : ${ciro.kapali_adisyon_sayisi}`,
-        `Nakit    : ${formatTry(ciro.odeme_kurus?.nakit ?? 0)}`,
-        `Kart     : ${formatTry(ciro.odeme_kurus?.kredi_karti ?? 0)}`,
-        `Havale   : ${formatTry(ciro.odeme_kurus?.havale ?? 0)}`,
-        `Cari     : ${formatTry(ciro.odeme_kurus?.cari ?? 0)}`,
-        ayir,
-      );
+      parts.push(`
+        <h2>Özet</h2>
+        <table>
+          <thead>
+            <tr>
+              <th class="num">Ciro</th>
+              <th class="num">Kapalı adisyon</th>
+              <th class="num">Nakit</th>
+              <th class="num">Kredi kartı</th>
+              <th class="num">Havale</th>
+              <th class="num">Cari</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="num">${escapeHtml(formatTry(ciro.ciro_kurus))}</td>
+              <td class="num">${escapeHtml(String(ciro.kapali_adisyon_sayisi ?? 0))}</td>
+              <td class="num">${escapeHtml(formatTry(ciro.odeme_kurus?.nakit ?? 0))}</td>
+              <td class="num">${escapeHtml(formatTry(ciro.odeme_kurus?.kredi_karti ?? 0))}</td>
+              <td class="num">${escapeHtml(formatTry(ciro.odeme_kurus?.havale ?? 0))}</td>
+              <td class="num">${escapeHtml(formatTry(ciro.odeme_kurus?.cari ?? 0))}</td>
+            </tr>
+          </tbody>
+        </table>
+      `);
     }
 
-    if (urunler?.satislar) {
-      lines.push("URUNLER");
-      lines.push(
-        ...urunler.satislar.map(
-          (u) => `${String(u.urun_adi || "").slice(0, 18)} | ${u.adet} | ${formatTry(u.tutar_kurus)}`,
-        ),
-      );
-      lines.push(ayir);
+    if (urunler?.satislar?.length) {
+      const rows = urunler.satislar
+        .map(
+          (u) =>
+            `<tr><td>${escapeHtml(u.urun_adi)}</td><td class="num">${escapeHtml(String(u.adet))}</td><td class="num">${escapeHtml(formatTry(u.tutar_kurus))}</td></tr>`,
+        )
+        .join("");
+      parts.push(`
+        <h2>Ürün satışları</h2>
+        <table>
+          <thead><tr><th>Ürün</th><th class="num">Adet</th><th class="num">Tutar</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      `);
     }
 
-    if (kategoriler?.satislar) {
-      lines.push("KATEGORILER");
-      lines.push(
-        ...kategoriler.satislar.map(
-          (k) => `${String(k.kategori_adi || "").slice(0, 18)} | ${k.adet} | ${formatTry(k.tutar_kurus)}`,
-        ),
-      );
-      lines.push(ayir);
+    if (kategoriler?.satislar?.length) {
+      const rows = kategoriler.satislar
+        .map(
+          (k) =>
+            `<tr><td>${escapeHtml(k.kategori_adi)}</td><td class="num">${escapeHtml(String(k.adet))}</td><td class="num">${escapeHtml(formatTry(k.tutar_kurus))}</td></tr>`,
+        )
+        .join("");
+      parts.push(`
+        <h2>Kategori bazlı</h2>
+        <table>
+          <thead><tr><th>Kategori</th><th class="num">Adet</th><th class="num">Tutar</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      `);
     }
 
-    if (ikramlar?.ozet) {
-      lines.push(
-        "IKRAM",
-        `Satir sayisi : ${ikramlar.ozet.satir_sayisi}`,
-        `Toplam adet  : ${ikramlar.ozet.toplam_adet}`,
-        ayir,
-      );
-    }
-
-    if (iptaller?.iptaller) {
-      lines.push(`IPTAL A.DISYON: ${iptaller.iptaller.length}`, ayir);
-    }
-
-    if (adisyonlar?.adisyonlar) {
-      lines.push(`KAPALI A.DISYON: ${adisyonlar.adisyonlar.length}`, ayir);
-    }
-
-    lines.push("");
-    const ok = printFisMetni("Rapor Fis", lines);
+    const ok = openFisWindow("Rapor fişi", parts.join(""));
     if (!ok) setErr("Yazdırma penceresi engellendi.");
   }
 
@@ -251,6 +263,14 @@ export default function Raporlar() {
         >
           Fiş yazdır
         </button>
+        <button
+          type="button"
+          onClick={gunlukToggle}
+          disabled={gunlukLoading}
+          className="rounded-lg border border-slate-600 px-4 py-2 text-sm text-slate-200 hover:bg-slate-800 disabled:opacity-50"
+        >
+          {gunlukLoading ? "…" : gunlukAcik ? "Gün bazlı listeyi gizle" : "Gün bazlı liste"}
+        </button>
       </div>
 
       <div className="mt-3 flex flex-wrap gap-2">
@@ -273,6 +293,47 @@ export default function Raporlar() {
       </div>
 
       {err && <p className="mt-4 text-sm text-amber-500">{err}</p>}
+
+      {gunlukAcik && gunluk?.gunler && (
+        <section className="mt-8 rounded-lg border border-slate-700 bg-slate-950/80 p-4">
+          <h2 className="text-lg font-medium text-slate-200">Gün bazlı ciro</h2>
+          <p className="mt-1 text-xs text-slate-500">
+            Ciro: kapanış gününe göre (cari hariç). Ödemeler: ödeme kaydı gününe göre.
+          </p>
+          <div className="mt-3 max-h-[min(70vh,520px)] overflow-auto rounded-lg border border-slate-700">
+            <table className="w-full min-w-[640px] text-left text-sm">
+              <thead className="sticky top-0 border-b border-slate-700 bg-slate-950 text-slate-500">
+                <tr>
+                  <th className="px-3 py-2">Tarih</th>
+                  <th className="px-3 py-2 text-right">Toplam ciro</th>
+                  <th className="px-3 py-2 text-right">Kredi kartı</th>
+                  <th className="px-3 py-2 text-right">Nakit</th>
+                  <th className="px-3 py-2 text-right">Havale</th>
+                </tr>
+              </thead>
+              <tbody>
+                {gunluk.gunler.map((g) => (
+                  <tr key={g.tarih} className="border-b border-slate-800">
+                    <td className="px-3 py-2 font-mono text-slate-300">{g.tarih}</td>
+                    <td className="px-3 py-2 text-right font-mono text-emerald-400/90">
+                      {formatTry(g.ciro_kurus)}
+                    </td>
+                    <td className="px-3 py-2 text-right font-mono">
+                      {formatTry(g.kredi_karti_kurus)}
+                    </td>
+                    <td className="px-3 py-2 text-right font-mono">
+                      {formatTry(g.nakit_kurus)}
+                    </td>
+                    <td className="px-3 py-2 text-right font-mono">
+                      {formatTry(g.havale_kurus)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
 
       {ciro && (
         <section className="mt-10">

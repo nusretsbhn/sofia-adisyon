@@ -77,8 +77,22 @@ router.get("/dashboard", async (_req, res, next) => {
       else if (o.odeme_turu === "HAVALE") havale += o.tutar;
     }
 
+    const [kapaliToplamTum, acikToplamTum] = await Promise.all([
+      prisma.adisyon.aggregate({
+        where: { durum: "KAPALI", NOT: { odeme_turu: "CARI" } },
+        _sum: { toplam_tutar: true },
+      }),
+      prisma.adisyon.aggregate({
+        where: { durum: "ACIK" },
+        _sum: { toplam_tutar: true },
+      }),
+    ]);
+    const tumZamanCiroKurus =
+      (kapaliToplamTum._sum.toplam_tutar ?? 0) + (acikToplamTum._sum.toplam_tutar ?? 0);
+
     res.json({
       tarih: dayjs().format("YYYY-MM-DD"),
+      tum_zamanlar_ciro_kurus: tumZamanCiroKurus,
       bugun: {
         ciro_kurus: ciroBugun,
         acik_toplam_kurus: acikToplam,
@@ -93,6 +107,75 @@ router.get("/dashboard", async (_req, res, next) => {
       anlik: {
         acik_adisyon_sayisi: acikAdisyonSayisi,
       },
+    });
+  } catch (e) {
+    next(e);
+  }
+});
+
+/**
+ * Gün bazlı: her gün için ciro (CARI hariç kapalı adisyon toplamı, kapanış günü) +
+ * ödeme kayıtları (nakit / kart / havale) — ödeme günü.
+ */
+router.get("/gunluk-ciro", async (req, res, next) => {
+  try {
+    const r = tryRange(req, res);
+    if (!r) return;
+
+    const [kapali, odemeler] = await Promise.all([
+      prisma.adisyon.findMany({
+        where: {
+          durum: "KAPALI",
+          kapanma_tarihi: { gte: r.start, lte: r.end },
+          NOT: { odeme_turu: "CARI" },
+        },
+        select: { toplam_tutar: true, kapanma_tarihi: true },
+      }),
+      prisma.odeme.findMany({
+        where: { tarih: { gte: r.start, lte: r.end } },
+        select: { tutar: true, odeme_turu: true, tarih: true },
+      }),
+    ]);
+
+    const ciroGun = new Map();
+    for (const a of kapali) {
+      const gun = dayjs(a.kapanma_tarihi).format("YYYY-MM-DD");
+      ciroGun.set(gun, (ciroGun.get(gun) ?? 0) + a.toplam_tutar);
+    }
+
+    const odemeGun = new Map();
+    for (const o of odemeler) {
+      const gun = dayjs(o.tarih).format("YYYY-MM-DD");
+      let row = odemeGun.get(gun);
+      if (!row) {
+        row = { nakit: 0, kredi_karti: 0, havale: 0 };
+        odemeGun.set(gun, row);
+      }
+      if (o.odeme_turu === "NAKIT") row.nakit += o.tutar;
+      else if (o.odeme_turu === "KREDI_KARTI") row.kredi_karti += o.tutar;
+      else if (o.odeme_turu === "HAVALE") row.havale += o.tutar;
+    }
+
+    const gunler = [];
+    let cur = dayjs(r.start).startOf("day");
+    const end = dayjs(r.end).startOf("day");
+    while (cur.isBefore(end) || cur.isSame(end, "day")) {
+      const key = cur.format("YYYY-MM-DD");
+      const pay = odemeGun.get(key) ?? { nakit: 0, kredi_karti: 0, havale: 0 };
+      gunler.push({
+        tarih: key,
+        ciro_kurus: ciroGun.get(key) ?? 0,
+        nakit_kurus: pay.nakit,
+        kredi_karti_kurus: pay.kredi_karti,
+        havale_kurus: pay.havale,
+      });
+      cur = cur.add(1, "day");
+    }
+
+    res.json({
+      baslangic: r.baslangic,
+      bitis: r.bitis,
+      gunler,
     });
   } catch (e) {
     next(e);
