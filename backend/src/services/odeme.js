@@ -133,12 +133,12 @@ export async function tamamlaOdemeVeKapat(tx, { adisyonId, kullaniciId, odeme_tu
     const hammaddeUrunler = await tx.urun.findMany({
       // Pasif ürünler reçete hammadde eşleşmesinde dikkate alınmaz.
       where: { ad: { in: hammaddeAdlar }, aktif: true },
-      select: { id: true, ad: true, stok_takibi: true, stok_birim: true },
+      select: { id: true, ad: true, tur: true, stok_takibi: true, stok_birim: true },
     });
     // Reçete hammadde_ad -> ürün ad eşleştirmesi yapar.
-    // Aynı isimle birden fazla ürün varsa (örn. "Vodka" hem içecek hem hammadde olabilir),
-    // stok takibi açık olan (stok_takibi=true) ürünü tercih eder.
-    // Birden fazla stok_takibi=true ürün varsa hataya düşeriz.
+    // Aynı adda hem satış ürünü hem hammadde varsa önce HAMMADDE kayıtlarına bakılır.
+    // Sonra stok_takibi=true olan tercih edilir.
+    // Birden fazla aday stok_takibi=true ise hataya düşeriz.
     const groups = new Map();
     for (const u of hammaddeUrunler) {
       const arr = groups.get(u.ad) ?? [];
@@ -149,7 +149,10 @@ export async function tamamlaOdemeVeKapat(tx, { adisyonId, kullaniciId, odeme_tu
       const arr = groups.get(ad) ?? [];
       if (arr.length === 0) continue;
 
-      const stoklu = arr.filter((x) => x.stok_takibi);
+      const hammaddeKayitlari = arr.filter((x) => x.tur === "HAMMADDE");
+      const pool = hammaddeKayitlari.length > 0 ? hammaddeKayitlari : arr;
+
+      const stoklu = pool.filter((x) => x.stok_takibi);
       if (stoklu.length === 1) {
         urunByAd.set(ad, stoklu[0]);
         continue;
@@ -163,9 +166,9 @@ export async function tamamlaOdemeVeKapat(tx, { adisyonId, kullaniciId, odeme_tu
         throw err;
       }
 
-      // stoklu yoksa tek ürün varsa onu kullan; stok takibi kapalıysa daha sonra HAMMADDE_STOK_KAPALI ile zaten durur.
-      if (arr.length === 1) {
-        urunByAd.set(ad, arr[0]);
+      // stoklu yoksa tek aday varsa onu kullan; stok takibi kapalıysa stok düşümü atlanır (ödeme devam eder).
+      if (pool.length === 1) {
+        urunByAd.set(ad, pool[0]);
         continue;
       }
 
@@ -202,12 +205,9 @@ export async function tamamlaOdemeVeKapat(tx, { adisyonId, kullaniciId, odeme_tu
           err.code = "HAMMADDE_BULUNAMADI";
           throw err;
         }
+        // Stok takibi kapalıysa bu reçete satırından stok düşülmez; ödeme bloklanmaz.
         if (!hammaddeUrun.stok_takibi) {
-          const err = new Error(
-            `Reçete hammadde ürünü stok takibi kapalı: "${r.hammadde_ad}"`,
-          );
-          err.code = "HAMMADDE_STOK_KAPALI";
-          throw err;
+          continue;
         }
         if (String(r.birim || "").trim() !== String(hammaddeUrun.stok_birim || "").trim()) {
           const err = new Error(
