@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import AdisyonKalemList from "../components/AdisyonKalemList.jsx";
 import api from "../api/client.js";
 import { formatTry } from "../lib/format.js";
+import { fisMetniYazdir } from "../lib/fisYazdir.js";
 import { tryToKurus } from "../lib/parseMoney.js";
 
 const MASA_SAYISI_STORAGE_KEY = "turadisyon_masa_sayisi";
@@ -535,20 +536,8 @@ export default function AdisyonList() {
     if (!aktifId) return;
     setBusy(true);
     try {
-      const { data } = await api.post(`/api/adisyonlar/${aktifId}/yazdir`);
-      // Electron'da (Windows) termal kütüphane yerine OS yazdırmayı kullan
-      if (window.turadisyon?.printReceipt && data?.metin) {
-        const printerName = localStorage.getItem("turadisyon_printer_name") || "kasa";
-        const r = await window.turadisyon.printReceipt({
-          printerName,
-          text: data.metin,
-        });
-        setToast(r?.ok ? "Yazdırıldı." : r?.error || "Yazdırılamadı.");
-      } else {
-        setToast(data.yazdirildi ? "Yazdırıldı." : data.uyari || "Tamam.");
-      }
-    } catch (e) {
-      setToast(e?.response?.data?.error || "Yazdırılamadı.");
+      const r = await fisMetniYazdir(aktifId);
+      setToast(r.toast);
     } finally {
       setBusy(false);
     }
@@ -713,6 +702,7 @@ export default function AdisyonList() {
       setToast("Tutar 0; cari işlem gerekmez.");
       return;
     }
+    const fisId = aktifId;
     setOdemePaying(true);
     try {
       await api.post(`/api/adisyonlar/${aktifId}/odeme`, {
@@ -720,7 +710,12 @@ export default function AdisyonList() {
         cari_id: cid,
       });
       setCariModal(false);
-      setToast("Cariye işlendi.");
+      const fis = await fisMetniYazdir(fisId);
+      setToast(
+        fis.ok
+          ? "Cariye işlendi · Fiş yazdırıldı."
+          : `Cariye işlendi. Fiş: ${fis.toast}`,
+      );
       await loadList();
       setAktifId(null);
       setDetay(null);
@@ -746,12 +741,18 @@ export default function AdisyonList() {
 
   async function tamOdemeDirect(tur) {
     if (!aktifId || !detay) return;
+    const fisId = aktifId;
     setOdemePaying(true);
     setOdemeErr("");
     try {
       await api.post(`/api/adisyonlar/${aktifId}/odeme`, { odeme_turu: tur });
       setOdemeModal(false);
-      setToast("Ödeme alındı.");
+      const fis = await fisMetniYazdir(fisId);
+      setToast(
+        fis.ok
+          ? "Ödeme alındı · Fiş yazdırıldı."
+          : `Ödeme alındı. Fiş: ${fis.toast}`,
+      );
       await loadList();
       setAktifId(null);
       setDetay(null);
@@ -783,6 +784,7 @@ export default function AdisyonList() {
       setOdemeErr(`Toplam ${formatTry(detay.toplam_tutar)} olmalı.`);
       return;
     }
+    const fisId = aktifId;
     setOdemePaying(true);
     setOdemeErr("");
     try {
@@ -795,10 +797,16 @@ export default function AdisyonList() {
         ],
       });
       setOdemeModal(false);
-      setToast("Ödeme alındı.");
+      const fis = await fisMetniYazdir(fisId);
+      setToast(
+        fis.ok
+          ? "Ödeme alındı · Fiş yazdırıldı."
+          : `Ödeme alındı. Fiş: ${fis.toast}`,
+      );
       await loadList();
       setAktifId(null);
       setDetay(null);
+      setSeciliKalemIds([]);
     } catch (e) {
       setOdemeErr(e?.response?.data?.error || "Ödeme alınamadı.");
     } finally {
@@ -859,8 +867,13 @@ export default function AdisyonList() {
       });
       const yeniId = data.yeni_adisyon.id;
       await api.post(`/api/adisyonlar/${yeniId}/odeme`, { odeme_turu: tur });
+      const fis = await fisMetniYazdir(yeniId);
       setOdenenKalemler((prev) => [...prev, ...odenenParcaSatirlari()]);
-      setToast("Seçilen kısım ödendi.");
+      setToast(
+        fis.ok
+          ? "Seçilen kısım ödendi · Fiş yazdırıldı."
+          : `Seçilen kısım ödendi. Fiş: ${fis.toast}`,
+      );
       await loadList();
       setSeciliKalemIds([]);
       setSeciliBolAdet({});
@@ -949,8 +962,13 @@ export default function AdisyonList() {
           { odeme_turu: "HAVALE", tutar: h },
         ],
       });
+      const fis = await fisMetniYazdir(yeniId);
       setOdenenKalemler((prev) => [...prev, ...odenenParcaSatirlari()]);
-      setToast("Seçilen kısım ödendi.");
+      setToast(
+        fis.ok
+          ? "Seçilen kısım ödendi · Fiş yazdırıldı."
+          : `Seçilen kısım ödendi. Fiş: ${fis.toast}`,
+      );
       await loadList();
       setSeciliKalemIds([]);
       setSeciliBolAdet({});

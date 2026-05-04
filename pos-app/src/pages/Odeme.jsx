@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useParams, useNavigate } from "react-router-dom";
 import api from "../api/client.js";
 import { formatTry } from "../lib/format.js";
+import { fisMetniYazdir } from "../lib/fisYazdir.js";
 import { tryToKurus } from "../lib/parseMoney.js";
 import AdisyonKalemList from "../components/AdisyonKalemList.jsx";
 
@@ -65,6 +66,7 @@ export default function Odeme() {
     setPaying(true);
     try {
       await api.post(`/api/adisyonlar/${id}/odeme`, { odeme_turu: tur, ...extra });
+      await fisMetniYazdir(adisyonId);
       nav("/", { replace: true });
     } catch (e) {
       setErr(e.response?.data?.error || "Ödeme tamamlanamadı");

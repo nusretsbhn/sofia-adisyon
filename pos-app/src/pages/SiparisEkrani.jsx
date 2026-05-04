@@ -1,5 +1,19 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { Link, useParams, useNavigate } from "react-router-dom";
+import {
+  DndContext,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  rectSortingStrategy,
+  useSortable,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import api from "../api/client.js";
 import { formatTry } from "../lib/format.js";
 
@@ -26,6 +40,53 @@ function adetFromBuffer(buf) {
   return Math.min(999, n);
 }
 
+function SortableUrunCard({ urun, onEkle }) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: urun.id });
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    zIndex: isDragging ? 20 : undefined,
+  };
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`flex rounded-lg border border-pos-border bg-pos-card min-h-[64px] sm:min-h-[72px] overflow-hidden ${
+        isDragging ? "opacity-90 ring-2 ring-sky-400/70 shadow-lg" : ""
+      }`}
+    >
+      <button
+        type="button"
+        className="shrink-0 w-7 sm:w-8 flex items-center justify-center bg-slate-800/90 text-slate-500 touch-none cursor-grab active:cursor-grabbing"
+        {...listeners}
+        {...attributes}
+        aria-label="Sırayı değiştir"
+      >
+        <span className="text-sm leading-none select-none">⠿</span>
+      </button>
+      <button
+        type="button"
+        onClick={() => onEkle(urun)}
+        className="flex flex-1 flex-col items-stretch justify-between p-2 sm:p-2.5 min-w-0 text-left active:scale-[0.98]"
+      >
+        <span className="text-slate-100 text-xs sm:text-sm font-medium leading-snug line-clamp-2">
+          {urun.ad}
+        </span>
+        <span className="mt-1 sm:mt-1.5 font-mono text-[11px] sm:text-xs text-blue-300 tabular-nums">
+          {formatTry(urun.fiyat)}
+        </span>
+      </button>
+    </div>
+  );
+}
+
 export default function SiparisEkrani() {
   const { id } = useParams();
   const nav = useNavigate();
@@ -41,6 +102,12 @@ export default function SiparisEkrani() {
   const [gonderiyor, setGonderiyor] = useState(false);
   const [barkod, setBarkod] = useState("");
   const [geriUyari, setGeriUyari] = useState(false);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { distance: 6 },
+    }),
+  );
 
   const load = useCallback(async () => {
     setErr("");
@@ -148,7 +215,7 @@ export default function SiparisEkrani() {
 
   const filtreUrun = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return urunler.filter((u) => {
+    const list = urunler.filter((u) => {
       if (!u.aktif) return false;
       if (q) {
         const byName = u.ad.toLowerCase().includes(q);
@@ -157,7 +224,50 @@ export default function SiparisEkrani() {
       }
       return u.kategori_id === katId;
     });
+    return [...list].sort(
+      (a, b) =>
+        (a.sira ?? 0) - (b.sira ?? 0) || a.ad.localeCompare(b.ad, "tr"),
+    );
   }, [urunler, katId, search]);
+
+  const urunSiraKaydet = useCallback(
+    async (event) => {
+      const { active, over } = event;
+      if (!katId || search.trim() || !over) return;
+      const activeId = Number(active.id);
+      const overId = Number(over.id);
+      if (!Number.isFinite(activeId) || !Number.isFinite(overId) || activeId === overId) {
+        return;
+      }
+
+      const items = urunler
+        .filter((u) => u.aktif && u.kategori_id === katId)
+        .sort(
+          (a, b) =>
+            (a.sira ?? 0) - (b.sira ?? 0) || a.ad.localeCompare(b.ad, "tr"),
+        );
+      const oldIndex = items.findIndex((u) => u.id === activeId);
+      const newIndex = items.findIndex((u) => u.id === overId);
+      if (oldIndex < 0 || newIndex < 0) return;
+
+      const newOrder = arrayMove(items, oldIndex, newIndex);
+      const urun_idler = newOrder.map((u) => u.id);
+
+      setUrunler((prev) => {
+        const others = prev.filter((u) => u.kategori_id !== katId);
+        const updated = newOrder.map((u, idx) => ({ ...u, sira: idx }));
+        return [...others, ...updated];
+      });
+
+      try {
+        await api.patch("/api/urunler/sira", { kategori_id: katId, urun_idler });
+      } catch {
+        setErr("Sıra kaydedilemedi.");
+        load();
+      }
+    },
+    [katId, search, urunler, load],
+  );
 
   function barkodEkle(e) {
     e.preventDefault();
@@ -224,19 +334,20 @@ export default function SiparisEkrani() {
 
   return (
     <div className="min-h-screen bg-pos-bg flex flex-col">
-      <header className="shrink-0 border-b border-pos-border p-3 flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <button
-            type="button"
-            onClick={geriGit}
-            className="text-sm text-blue-400"
-          >
-            ← Ana sayfa
-          </button>
-          <h1 className="text-lg font-semibold text-slate-100 mt-1">
-            Ürün ekle · Masa <span className="text-blue-400 tabular-nums">{masa}</span>
+      <header className="shrink-0 border-b border-pos-border px-3 py-1.5 flex flex-wrap items-center gap-x-3 gap-y-0.5">
+        <button
+          type="button"
+          onClick={geriGit}
+          className="text-xs text-blue-400 shrink-0"
+        >
+          ← Ana sayfa
+        </button>
+        <div className="min-w-0 flex-1">
+          <h1 className="text-base font-semibold text-slate-100 leading-tight">
+            Ürün ekle · Masa{" "}
+            <span className="text-blue-400 tabular-nums">{masa}</span>
           </h1>
-          <p className="text-xs text-slate-600 font-mono truncate max-w-[280px]">
+          <p className="text-[10px] text-slate-600 font-mono truncate max-w-[min(100%,280px)] leading-tight mt-0.5">
             {adisyon.numara} · {adisyon.musteri_adi || "Misafir"}
           </p>
         </div>
@@ -246,19 +357,21 @@ export default function SiparisEkrani() {
 
       <div className="flex-1 flex flex-col lg:flex-row min-h-0">
         {/* Sol: taslak + numpad */}
-        <div className="lg:w-[340px] shrink-0 border-b lg:border-b-0 lg:border-r border-pos-border flex flex-col p-3 gap-3 bg-slate-950/30">
-          <div>
-            <p className="text-xs text-slate-500">Adet (önce rakam, sonra ürün)</p>
-            <p className="mt-1 font-mono text-3xl text-amber-300/90 tabular-nums min-h-[40px]">
+        <div className="lg:w-[300px] shrink-0 border-b lg:border-b-0 lg:border-r border-pos-border flex flex-col p-2 gap-2 bg-slate-950/30 min-h-0">
+          <div className="shrink-0">
+            <p className="text-[10px] text-slate-500 leading-tight">
+              Adet (önce rakam, sonra ürün)
+            </p>
+            <p className="mt-0.5 font-mono text-2xl text-amber-300/90 tabular-nums min-h-[32px]">
               {adetGiris || " "}
             </p>
-            <div className="grid grid-cols-3 gap-2 mt-2 max-w-[240px]">
+            <div className="grid grid-cols-3 gap-1.5 mt-1.5 max-w-[210px]">
               {["9", "8", "7", "6", "5", "4", "3", "2", "1"].map((d) => (
                 <button
                   key={d}
                   type="button"
                   onClick={() => rakamEkle(d)}
-                  className="min-h-[48px] rounded-lg bg-slate-800 text-xl font-semibold text-slate-100 active:bg-slate-700"
+                  className="min-h-[36px] rounded-md bg-slate-800 text-base font-semibold text-slate-100 active:bg-slate-700"
                 >
                   {d}
                 </button>
@@ -266,45 +379,47 @@ export default function SiparisEkrani() {
               <button
                 type="button"
                 onClick={adetTemizle}
-                className="min-h-[48px] rounded-lg bg-amber-950/50 text-amber-200 text-sm font-medium"
+                className="min-h-[36px] rounded-md bg-amber-950/50 text-amber-200 text-xs font-medium"
               >
                 C
               </button>
               <button
                 type="button"
                 onClick={() => rakamEkle("0")}
-                className="min-h-[48px] rounded-lg bg-slate-800 text-xl font-semibold text-slate-100"
+                className="min-h-[36px] rounded-md bg-slate-800 text-base font-semibold text-slate-100"
               >
                 0
               </button>
               <button
                 type="button"
                 onClick={rakamSil}
-                className="min-h-[48px] rounded-lg bg-slate-800 text-sm text-slate-300"
+                className="min-h-[36px] rounded-md bg-slate-800 text-xs text-slate-300"
               >
                 Sil
               </button>
             </div>
           </div>
 
-          <form onSubmit={barkodEkle} className="flex gap-2">
+          <form onSubmit={barkodEkle} className="flex gap-1.5 shrink-0">
             <input
-              className="flex-1 min-h-[44px] rounded-lg border border-pos-border bg-pos-bg px-3 text-sm text-slate-100"
+              className="flex-1 min-h-[38px] rounded-lg border border-pos-border bg-pos-bg px-2 text-sm text-slate-100"
               placeholder="Barkod"
               value={barkod}
               onChange={(e) => setBarkod(e.target.value)}
             />
             <button
               type="submit"
-              className="min-h-[44px] px-3 rounded-lg bg-slate-700 text-sm text-white"
+              className="min-h-[38px] px-2.5 rounded-lg bg-slate-700 text-sm text-white"
             >
               OK
             </button>
           </form>
 
-          <div className="flex-1 min-h-[120px] flex flex-col border border-pos-border rounded-lg overflow-hidden bg-pos-card/50">
-            <p className="text-xs text-slate-500 px-2 py-1 border-b border-pos-border">Taslak</p>
-            <div className="flex-1 overflow-y-auto p-2 space-y-1 max-h-[40vh] lg:max-h-none">
+          <div className="flex-1 flex flex-col border border-pos-border rounded-lg overflow-hidden bg-pos-card/50 min-h-0">
+            <p className="text-[10px] text-slate-500 px-2 py-0.5 border-b border-pos-border shrink-0">
+              Taslak
+            </p>
+            <div className="flex-1 overflow-y-auto p-1.5 space-y-0.5 min-h-0">
               {draft.length === 0 ? (
                 <p className="text-sm text-slate-600 py-4 text-center">Henüz satır yok</p>
               ) : (
@@ -342,7 +457,7 @@ export default function SiparisEkrani() {
             type="button"
             disabled={draft.length === 0 || gonderiyor}
             onClick={gonder}
-            className="w-full min-h-[56px] rounded-xl bg-emerald-600 text-lg font-bold text-white disabled:opacity-40"
+            className="w-full shrink-0 min-h-[48px] rounded-xl bg-emerald-600 text-base font-bold text-white disabled:opacity-40"
           >
             {gonderiyor ? "Gönderiliyor…" : "Gönder (adisyona işle)"}
           </button>
@@ -352,49 +467,86 @@ export default function SiparisEkrani() {
         <div className="flex-1 flex flex-col min-h-0">
           <input
             type="search"
-            className="mx-3 mt-3 min-h-[44px] rounded-lg border border-pos-border bg-pos-bg px-3 text-slate-100"
+            className="mx-3 mt-2 min-h-[40px] rounded-lg border border-pos-border bg-pos-bg px-3 text-sm text-slate-100 shrink-0"
             placeholder="Ürün veya barkod ara…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
           {!search.trim() && (
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 p-3 bg-slate-950/50">
-              {kategoriler.map((k) => (
+            <>
+              <div className="shrink-0 px-3 pt-2 pb-1 bg-slate-950/50">
+                <p className="text-[10px] uppercase tracking-wide text-slate-500 mb-1.5">
+                  Kategoriler
+                </p>
+                <div className="grid grid-cols-5 gap-1 sm:gap-1.5">
+                  {kategoriler.map((k) => (
+                    <button
+                      key={k.id}
+                      type="button"
+                      onClick={() => setKatId(k.id)}
+                      className={`min-h-[36px] min-w-0 rounded-md px-1.5 py-1 text-[11px] sm:text-xs font-medium text-center leading-tight line-clamp-2 border transition-colors ${
+                        katId === k.id
+                          ? "bg-emerald-800 text-white border-emerald-950 shadow-inner"
+                          : "bg-sky-500/95 text-white border-sky-600 hover:bg-sky-500"
+                      }`}
+                    >
+                      {k.ad}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div
+                className="shrink-0 mx-3 flex items-center gap-2 py-1.5"
+                role="separator"
+                aria-label="Kategoriler ve ürünler"
+              >
+                <div className="h-[2px] flex-1 rounded-full bg-gradient-to-r from-transparent via-slate-500/70 to-slate-500/40" />
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 whitespace-nowrap px-1">
+                  Ürünler
+                </span>
+                <div className="h-[2px] flex-1 rounded-full bg-gradient-to-l from-transparent via-slate-500/70 to-slate-500/40" />
+              </div>
+              <p className="px-3 text-[10px] text-slate-500 pb-1">
+                Ürün sırası: sol tutamacı sürükleyin (kayıtlı kalır).
+              </p>
+            </>
+          )}
+          {search.trim() ? (
+            <div className="flex-1 overflow-y-auto min-h-0 p-2 sm:p-3 pt-1 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-1.5 sm:gap-2 content-start">
+              {filtreUrun.map((u) => (
                 <button
-                  key={k.id}
+                  key={u.id}
                   type="button"
-                  onClick={() => setKatId(k.id)}
-                  className={`min-h-[44px] min-w-0 rounded-lg px-3 py-2 text-sm font-medium text-center truncate ${
-                    katId === k.id
-                      ? "bg-pos-primary text-white"
-                      : "bg-pos-card text-slate-300 border border-pos-border"
-                  }`}
-                  style={
-                    katId === k.id && k.renk ? { backgroundColor: k.renk } : undefined
-                  }
+                  onClick={() => urunTasla(u)}
+                  className="flex flex-col items-stretch justify-between rounded-lg border border-pos-border bg-pos-card p-2 sm:p-2.5 min-h-[64px] sm:min-h-[72px] text-left active:scale-[0.98]"
                 >
-                  {k.ad}
+                  <span className="text-slate-100 text-xs sm:text-sm font-medium leading-snug line-clamp-2">
+                    {u.ad}
+                  </span>
+                  <span className="mt-1 sm:mt-1.5 font-mono text-[11px] sm:text-xs text-blue-300 tabular-nums">
+                    {formatTry(u.fiyat)}
+                  </span>
                 </button>
               ))}
             </div>
-          )}
-          <div className="flex-1 overflow-y-auto p-2 sm:p-3 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-1.5 sm:gap-2 content-start">
-            {filtreUrun.map((u) => (
-              <button
-                key={u.id}
-                type="button"
-                onClick={() => urunTasla(u)}
-                className="flex flex-col items-stretch justify-between rounded-lg border border-pos-border bg-pos-card p-2 sm:p-2.5 min-h-[64px] sm:min-h-[72px] text-left active:scale-[0.98]"
+          ) : (
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={urunSiraKaydet}
+            >
+              <SortableContext
+                items={filtreUrun.map((u) => u.id)}
+                strategy={rectSortingStrategy}
               >
-                <span className="text-slate-100 text-xs sm:text-sm font-medium leading-snug line-clamp-2">
-                  {u.ad}
-                </span>
-                <span className="mt-1 sm:mt-1.5 font-mono text-[11px] sm:text-xs text-blue-300 tabular-nums">
-                  {formatTry(u.fiyat)}
-                </span>
-              </button>
-            ))}
-          </div>
+                <div className="flex-1 overflow-y-auto min-h-0 p-2 sm:p-3 pt-1 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-1.5 sm:gap-2 content-start">
+                  {filtreUrun.map((u) => (
+                    <SortableUrunCard key={u.id} urun={u} onEkle={urunTasla} />
+                  ))}
+                </div>
+              </SortableContext>
+            </DndContext>
+          )}
         </div>
       </div>
 

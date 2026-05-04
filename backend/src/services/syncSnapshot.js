@@ -83,6 +83,7 @@ export async function applyMasterSnapshot(snapshot) {
           "aciklama",
           "min_stok",
           "aktif",
+          "sira",
           "olusturma_tarihi",
         ]),
         update: row(item, [
@@ -96,6 +97,7 @@ export async function applyMasterSnapshot(snapshot) {
           "aciklama",
           "min_stok",
           "aktif",
+          "sira",
         ]),
       });
     }

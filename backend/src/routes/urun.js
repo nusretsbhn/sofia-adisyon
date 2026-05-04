@@ -18,6 +18,7 @@ const createSchema = z.object({
   aciklama: z.string().max(500).optional().nullable(),
   min_stok: z.number().int().min(0).optional(),
   aktif: z.boolean().optional(),
+  sira: z.number().int().min(0).optional(),
 });
 
 const updateSchema = z.object({
@@ -31,6 +32,12 @@ const updateSchema = z.object({
   aciklama: z.string().max(500).optional().nullable(),
   min_stok: z.number().int().min(0).optional(),
   aktif: z.boolean().optional(),
+  sira: z.number().int().min(0).optional(),
+});
+
+const siraKategoriSchema = z.object({
+  kategori_id: z.number().int().positive(),
+  urun_idler: z.array(z.number().int().positive()),
 });
 
 function parseId(param) {
@@ -59,13 +66,62 @@ const urunInclude = {
   },
 };
 
+/** POS: kategori içi ürün sırası (tüm roller, yalnızca sira güncellenir) */
+router.patch("/sira", async (req, res, next) => {
+  try {
+    const parsed = siraKategoriSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: "Geçersiz istek" });
+    }
+    const { kategori_id, urun_idler } = parsed.data;
+    if (urun_idler.length === 0) {
+      return res.json({ ok: true });
+    }
+    const kategoriUrunIdler = await prisma.urun.findMany({
+      where: { kategori_id },
+      select: { id: true },
+    });
+    const idSet = new Set(kategoriUrunIdler.map((u) => u.id));
+    for (const uid of urun_idler) {
+      if (!idSet.has(uid)) {
+        return res.status(400).json({ error: "Ürün bu kategoriye ait değil" });
+      }
+    }
+
+    await prisma.$transaction(async (tx) => {
+      let i = 0;
+      for (const uid of urun_idler) {
+        await tx.urun.update({
+          where: { id: uid },
+          data: { sira: i++ },
+        });
+      }
+      const listed = new Set(urun_idler);
+      const diger = await tx.urun.findMany({
+        where: { kategori_id, id: { notIn: [...listed] } },
+        orderBy: { ad: "asc" },
+      });
+      for (const u of diger) {
+        await tx.urun.update({
+          where: { id: u.id },
+          data: { sira: i++ },
+        });
+      }
+    });
+
+    res.json({ ok: true });
+  } catch (e) {
+    next(e);
+  }
+});
+
 router.get("/", async (req, res, next) => {
   try {
     const aktifOnly = req.query.aktif !== "false";
     const where = aktifOnly ? { aktif: true } : {};
     const urunler = await prisma.urun.findMany({
       where,
-      orderBy: [{ kategori_id: "asc" }, { ad: "asc" }],
+      orderBy: [{ kategori_id: "asc" }, { sira: "asc" }, { ad: "asc" }],
       include: urunInclude,
     });
     res.json({ urunler });
@@ -104,6 +160,14 @@ router.post("/", requireGarsonDegil, async (req, res, next) => {
     }
     const kat = await prisma.kategori.findUnique({ where: { id: kategori_id } });
     if (!kat) return res.status(400).json({ error: "Kategori bulunamadı" });
+    const maxSira = await prisma.urun.aggregate({
+      where: { kategori_id },
+      _max: { sira: true },
+    });
+    const yeniSira =
+      parsed.data.sira !== undefined
+        ? parsed.data.sira
+        : (maxSira._max.sira ?? -1) + 1;
     const urun = await prisma.urun.create({
       data: {
         kategori_id,
@@ -116,6 +180,7 @@ router.post("/", requireGarsonDegil, async (req, res, next) => {
         aciklama: parsed.data.aciklama ?? null,
         min_stok: parsed.data.min_stok ?? 0,
         aktif: parsed.data.aktif ?? true,
+        sira: yeniSira,
       },
       include: urunInclude,
     });

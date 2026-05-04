@@ -53,6 +53,7 @@ model Urun {
   aciklama         String?
   min_stok         Int      @default(0)
   aktif            Boolean  @default(true)
+  sira             Int      @default(0) // kategori içi sıra
   olusturma_tarihi DateTime @default(now())
 
   kategori        Kategori         @relation(fields: [kategori_id], references: [id])
