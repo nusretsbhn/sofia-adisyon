@@ -131,7 +131,8 @@ export async function tamamlaOdemeVeKapat(tx, { adisyonId, kullaniciId, odeme_tu
   let urunByAd = new Map();
   if (hammaddeAdlar.length > 0) {
     const hammaddeUrunler = await tx.urun.findMany({
-      where: { ad: { in: hammaddeAdlar } },
+      // Pasif ürünler reçete hammadde eşleşmesinde dikkate alınmaz.
+      where: { ad: { in: hammaddeAdlar }, aktif: true },
       select: { id: true, ad: true, stok_takibi: true, stok_birim: true },
     });
     // Reçete hammadde_ad -> ürün ad eşleştirmesi yapar.
