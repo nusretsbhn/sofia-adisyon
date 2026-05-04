@@ -21,6 +21,13 @@ export default function Envanter() {
     aciklama: "",
   });
   const [saving, setSaving] = useState(false);
+  const [editRow, setEditRow] = useState(null);
+  const [editForm, setEditForm] = useState({
+    min_stok: "0",
+    stok_birim: "adet",
+    aktif: true,
+  });
+  const [editSaving, setEditSaving] = useState(false);
 
   const load = useCallback(async () => {
     setErr("");
@@ -81,6 +88,41 @@ export default function Envanter() {
       setMsg(e?.response?.data?.error || "Kayıt başarısız.");
     } finally {
       setSaving(false);
+    }
+  }
+
+  function duzenleAc(s) {
+    setEditRow(s);
+    setEditForm({
+      min_stok: String(s.min_stok ?? 0),
+      stok_birim: s.stok_birim || "adet",
+      aktif: !!s.aktif,
+    });
+  }
+
+  async function duzenleKaydet(e) {
+    e.preventDefault();
+    if (!editRow) return;
+    const min = Number.parseInt(String(editForm.min_stok).trim(), 10);
+    if (!Number.isFinite(min) || min < 0) {
+      setMsg("Minimum stok 0 veya daha büyük bir tam sayı olmalı.");
+      return;
+    }
+    setEditSaving(true);
+    setMsg("");
+    try {
+      await api.put(`/api/urunler/${editRow.urun_id}`, {
+        min_stok: min,
+        stok_birim: editForm.stok_birim,
+        aktif: editForm.aktif,
+      });
+      setEditRow(null);
+      setMsg("Ürün ayarları güncellendi.");
+      await load();
+    } catch (err) {
+      setMsg(err?.response?.data?.error || "Güncellenemedi.");
+    } finally {
+      setEditSaving(false);
     }
   }
 
@@ -163,12 +205,13 @@ export default function Envanter() {
                 <th className="px-3 py-2 text-right">Çıkış</th>
                 <th className="px-3 py-2 text-right">Mevcut</th>
                 <th className="px-3 py-2 text-right">Min.</th>
+                <th className="px-3 py-2 text-right w-[100px]">İşlem</th>
               </tr>
             </thead>
             <tbody>
               {satirlar.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-3 py-8 text-center text-slate-500">
+                  <td colSpan={7} className="px-3 py-8 text-center text-slate-500">
                     Stok takibi açık ürün yok. Ürünler sayfasından ürün için &quot;Stok takibi&quot;
                     işaretleyin.
                   </td>
@@ -202,6 +245,15 @@ export default function Envanter() {
                     <td className="px-3 py-2 text-right font-mono text-slate-500">
                       {s.min_stok}
                     </td>
+                    <td className="px-3 py-2 text-right">
+                      <button
+                        type="button"
+                        onClick={() => duzenleAc(s)}
+                        className="rounded-lg border border-slate-600 px-2.5 py-1 text-xs text-slate-200 hover:bg-slate-800"
+                      >
+                        Düzenle
+                      </button>
+                    </td>
                   </tr>
                 ))
               )}
@@ -209,6 +261,77 @@ export default function Envanter() {
           </table>
         </div>
       </section>
+
+      {editRow && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="env-duzenle-baslik"
+          onClick={() => !editSaving && setEditRow(null)}
+        >
+          <form
+            className="w-full max-w-md rounded-xl border border-slate-700 bg-slate-950 p-5 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+            onSubmit={duzenleKaydet}
+          >
+            <h2 id="env-duzenle-baslik" className="text-lg font-semibold text-slate-100">
+              Stok ayarları
+            </h2>
+            <p className="mt-1 text-sm text-slate-400">{editRow.urun_adi}</p>
+            <p className="mt-1 text-xs text-slate-600">{editRow.kategori_adi || "—"}</p>
+
+            <label className="mt-5 block text-xs text-slate-500">Minimum stok (uyarı eşiği)</label>
+            <input
+              type="number"
+              min={0}
+              className="mt-1 w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-slate-100"
+              value={editForm.min_stok}
+              onChange={(e) => setEditForm((f) => ({ ...f, min_stok: e.target.value }))}
+              required
+            />
+
+            <label className="mt-4 block text-xs text-slate-500">Stok birimi</label>
+            <select
+              className="mt-1 w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-slate-100"
+              value={editForm.stok_birim}
+              onChange={(e) => setEditForm((f) => ({ ...f, stok_birim: e.target.value }))}
+            >
+              <option value="adet">adet</option>
+              <option value="cl">cl</option>
+              <option value="gr">gr</option>
+            </select>
+
+            <label className="mt-4 flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={editForm.aktif}
+                onChange={(e) => setEditForm((f) => ({ ...f, aktif: e.target.checked }))}
+                className="rounded border-slate-600 bg-slate-900"
+              />
+              <span className="text-sm text-slate-300">Ürün aktif (pasif ürün listede soluk görünür)</span>
+            </label>
+
+            <div className="mt-6 flex gap-2">
+              <button
+                type="button"
+                disabled={editSaving}
+                className="flex-1 rounded-lg border border-slate-600 py-2 text-sm text-slate-300 hover:bg-slate-800 disabled:opacity-50"
+                onClick={() => setEditRow(null)}
+              >
+                İptal
+              </button>
+              <button
+                type="submit"
+                disabled={editSaving}
+                className="flex-1 rounded-lg bg-blue-600 py-2 text-sm font-medium text-white disabled:opacity-50"
+              >
+                {editSaving ? "Kaydediliyor…" : "Kaydet"}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
 
       <section className="mt-10">
         <h2 className="text-lg font-medium text-slate-200">Stok girişi</h2>
