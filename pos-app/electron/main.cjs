@@ -213,7 +213,7 @@ async function printReceiptViaWindows(printerName, text) {
   <html><head>
     <meta charset="utf-8" />
     <style>
-      body { font-family: Consolas, "Courier New", monospace; font-size: 12px; margin: 0; padding: 8px; }
+      body { font-family: Consolas, "Courier New", monospace; font-size: 12px; margin: 0; padding: 8px 8px 26px 8px; }
       pre { white-space: pre-wrap; margin: 0; }
     </style>
   </head>

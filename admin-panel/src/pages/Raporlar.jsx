@@ -9,6 +9,31 @@ function yerelGun(d = new Date()) {
   return `${y}-${m}-${day}`;
 }
 
+function printFisMetni(baslik, satirlar) {
+  const html = `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>${baslik}</title>
+    <style>
+      @page { size: 80mm auto; margin: 0; }
+      body { font-family: Consolas, "Courier New", monospace; font-size: 12px; margin: 0; padding: 8px 8px 24px 8px; }
+      pre { white-space: pre-wrap; margin: 0; }
+    </style>
+  </head>
+  <body>
+    <pre>${satirlar.join("\n")}</pre>
+    <script>window.onload = () => { window.print(); setTimeout(() => window.close(), 300); };</script>
+  </body>
+</html>`;
+  const w = window.open("", "_blank", "width=420,height=760");
+  if (!w) return false;
+  w.document.open();
+  w.document.write(html);
+  w.document.close();
+  return true;
+}
+
 export default function Raporlar() {
   const [baslangic, setBaslangic] = useState(yerelGun());
   const [bitis, setBitis] = useState(yerelGun());
@@ -119,6 +144,72 @@ export default function Raporlar() {
     }
   }
 
+  function raporFisYazdir() {
+    const ayir = "-".repeat(32);
+    const lines = [
+      "TURADISYON",
+      "RAPOR OZETI",
+      ayir,
+      `Aralik: ${baslangic} -> ${bitis}`,
+      `Tarih : ${new Date().toLocaleString("tr-TR")}`,
+      ayir,
+    ];
+
+    if (ciro) {
+      lines.push(
+        "CIRO",
+        `Ciro     : ${formatTry(ciro.ciro_kurus)}`,
+        `Kapali   : ${ciro.kapali_adisyon_sayisi}`,
+        `Nakit    : ${formatTry(ciro.odeme_kurus?.nakit ?? 0)}`,
+        `Kart     : ${formatTry(ciro.odeme_kurus?.kredi_karti ?? 0)}`,
+        `Havale   : ${formatTry(ciro.odeme_kurus?.havale ?? 0)}`,
+        `Cari     : ${formatTry(ciro.odeme_kurus?.cari ?? 0)}`,
+        ayir,
+      );
+    }
+
+    if (urunler?.satislar) {
+      lines.push("URUNLER");
+      lines.push(
+        ...urunler.satislar.map(
+          (u) => `${String(u.urun_adi || "").slice(0, 18)} | ${u.adet} | ${formatTry(u.tutar_kurus)}`,
+        ),
+      );
+      lines.push(ayir);
+    }
+
+    if (kategoriler?.satislar) {
+      lines.push("KATEGORILER");
+      lines.push(
+        ...kategoriler.satislar.map(
+          (k) => `${String(k.kategori_adi || "").slice(0, 18)} | ${k.adet} | ${formatTry(k.tutar_kurus)}`,
+        ),
+      );
+      lines.push(ayir);
+    }
+
+    if (ikramlar?.ozet) {
+      lines.push(
+        "IKRAM",
+        `Satir sayisi : ${ikramlar.ozet.satir_sayisi}`,
+        `Toplam adet  : ${ikramlar.ozet.toplam_adet}`,
+        ayir,
+      );
+    }
+
+    if (iptaller?.iptaller) {
+      lines.push(`IPTAL A.DISYON: ${iptaller.iptaller.length}`, ayir);
+    }
+
+    if (adisyonlar?.adisyonlar) {
+      lines.push(`KAPALI A.DISYON: ${adisyonlar.adisyonlar.length}`, ayir);
+    }
+
+    lines.push("");
+    const ok = printFisMetni("Rapor Fis", lines);
+    if (!ok) setErr("Yazdırma penceresi engellendi.");
+  }
+
   return (
     <div className="p-6">
       <h1 className="text-2xl font-semibold text-slate-100">Raporlar</h1>
@@ -152,6 +243,13 @@ export default function Raporlar() {
           className="rounded-lg bg-blue-600 px-4 py-2 text-sm text-white disabled:opacity-50"
         >
           {loading ? "…" : "Uygula"}
+        </button>
+        <button
+          type="button"
+          onClick={raporFisYazdir}
+          className="rounded-lg border border-slate-600 px-4 py-2 text-sm text-slate-200 hover:bg-slate-800"
+        >
+          Fiş yazdır
         </button>
       </div>
 

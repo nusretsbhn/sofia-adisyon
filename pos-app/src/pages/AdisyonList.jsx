@@ -1118,6 +1118,9 @@ export default function AdisyonList() {
   function kasaOzetMetniOlustur() {
     const ayir = "-".repeat(32);
     const ts = new Date().toLocaleString("tr-TR");
+    const nakit = kasaCiro?.odeme_kurus?.nakit ?? 0;
+    const kredi = kasaCiro?.odeme_kurus?.kredi_karti ?? 0;
+    const havale = kasaCiro?.odeme_kurus?.havale ?? 0;
     return [
       "TURADISYON",
       "KASA OZETI",
@@ -1127,6 +1130,9 @@ export default function AdisyonList() {
       `Gunluk ciro : ${formatTry(canliToplamCiro)}`,
       `Acik toplam : ${formatTry(acikToplamTutar)}`,
       `Kapali toplam: ${formatTry(kapaliToplamTutar)}`,
+      `Nakit      : ${formatTry(nakit)}`,
+      `Kredi karti: ${formatTry(kredi)}`,
+      `Havale     : ${formatTry(havale)}`,
       ayir,
       `Toplam adisyon: ${toplamAdisyonSayisi}`,
       `Acik adisyon : ${acikAdisyonSayisi}`,

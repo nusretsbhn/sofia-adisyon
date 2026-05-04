@@ -7,6 +7,31 @@ function tryToKurus(s) {
   return Math.round(n * 100);
 }
 
+function printFisMetni(baslik, satirlar) {
+  const html = `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>${baslik}</title>
+    <style>
+      @page { size: 80mm auto; margin: 0; }
+      body { font-family: Consolas, "Courier New", monospace; font-size: 12px; margin: 0; padding: 8px 8px 24px 8px; }
+      pre { white-space: pre-wrap; margin: 0; }
+    </style>
+  </head>
+  <body>
+    <pre>${satirlar.join("\n")}</pre>
+    <script>window.onload = () => { window.print(); setTimeout(() => window.close(), 300); };</script>
+  </body>
+</html>`;
+  const w = window.open("", "_blank", "width=420,height=720");
+  if (!w) return false;
+  w.document.open();
+  w.document.write(html);
+  w.document.close();
+  return true;
+}
+
 export default function Envanter() {
   const [satirlar, setSatirlar] = useState([]);
   const [girisler, setGirisler] = useState([]);
@@ -83,6 +108,38 @@ export default function Envanter() {
     }
   }
 
+  function envanterFisYazdir() {
+    const ayir = "-".repeat(32);
+    const dusukler = satirlar.filter((s) => s.dusuk).length;
+    const aktifSayisi = satirlar.filter((s) => s.aktif).length;
+    const satirlarText = [
+      "TURADISYON",
+      "ENVANTER OZETI",
+      ayir,
+      `Tarih: ${new Date().toLocaleString("tr-TR")}`,
+      `Toplam urun: ${satirlar.length}`,
+      `Aktif urun : ${aktifSayisi}`,
+      `Dusuk stok : ${dusukler}`,
+      ayir,
+      "URUNLER",
+      ...satirlar.map((s) => {
+        const birim = s.stok_birim || "";
+        return `${String(s.urun_adi || "").slice(0, 18)}  M:${s.mevcut}${birim ? ` ${birim}` : ""} Min:${s.min_stok}`;
+      }),
+      ayir,
+      "SON GIRISLER",
+      ...(girisler.length
+        ? girisler.map((g) => {
+            const t = g.tarih ? new Date(g.tarih).toLocaleString("tr-TR") : "-";
+            return `${t} | ${g.urun_adi} | +${g.miktar}`;
+          })
+        : ["-"]),
+      "",
+    ];
+    const ok = printFisMetni("Envanter Fis", satirlarText);
+    if (!ok) setMsg("Yazdırma penceresi engellendi.");
+  }
+
   if (loading) {
     return (
       <div className="p-6 text-slate-500">
@@ -111,7 +168,16 @@ export default function Envanter() {
       )}
 
       <section className="mt-8">
-        <h2 className="text-lg font-medium text-slate-200">Mevcut stok</h2>
+        <div className="flex items-center justify-between gap-2">
+          <h2 className="text-lg font-medium text-slate-200">Mevcut stok</h2>
+          <button
+            type="button"
+            onClick={envanterFisYazdir}
+            className="rounded border border-slate-600 px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-800"
+          >
+            Fiş yazdır
+          </button>
+        </div>
         <div className="mt-3 overflow-x-auto rounded-lg border border-slate-700">
           <table className="w-full text-left text-sm">
             <thead className="border-b border-slate-700 bg-slate-950 text-slate-500">

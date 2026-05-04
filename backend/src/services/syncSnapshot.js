@@ -12,13 +12,14 @@ function row(base, keys) {
 }
 
 export async function buildMasterSnapshot() {
-  const [kategoriler, urunler, receteler, ayarlar, kullanicilar] =
+  const [kategoriler, urunler, receteler, ayarlar, kullanicilar, cariler] =
     await Promise.all([
       prisma.kategori.findMany(),
       prisma.urun.findMany(),
       prisma.recete.findMany(),
       prisma.programAyar.findMany(),
       prisma.kullanici.findMany(),
+      prisma.cari.findMany(),
     ]);
 
   return {
@@ -28,6 +29,7 @@ export async function buildMasterSnapshot() {
     receteler,
     ayarlar,
     kullanicilar,
+    cariler,
   };
 }
 
@@ -137,6 +139,23 @@ export async function applyMasterSnapshot(snapshot) {
           "rol",
           "aktif",
         ]),
+      });
+    }
+
+    // Admin panelde tanımlanan cariler master verinin parçası olarak POS'a taşınır.
+    for (const item of data.cariler || []) {
+      await tx.cari.upsert({
+        where: { id: item.id },
+        create: row(item, [
+          "id",
+          "ad",
+          "telefon",
+          "email",
+          "notlar",
+          "toplam_borc",
+          "olusturma_tarihi",
+        ]),
+        update: row(item, ["ad", "telefon", "email", "notlar", "toplam_borc"]),
       });
     }
   });
